@@ -346,24 +346,30 @@ function normalizeFlights(payload: unknown): Flight[] {
 
   return source.map((item, index) => {
     const flight = item as Record<string, unknown>
-    const flightNo = String(flight.flightNo ?? flight.flight_number ?? flight.flight ?? flight.callsign ?? `FLIGHT-${index + 1}`)
-    const route = String(flight.route ?? `${flight.origin ?? 'MLE'}→${flight.destination ?? '---'}`)
-    const directionValue = String(flight.direction ?? flight.arrivalDeparture ?? flight.operation ?? flight.flightType ?? '').toUpperCase()
+    const flightNo = String(flight.flightNo ?? flight.flightNumber ?? flight.flight_number ?? flight.flight ?? flight.callsign ?? `FLIGHT-${index + 1}`)
+    const origin = String(flight.originCode ?? flight.origin ?? '---')
+    const destination = String(flight.destinationCode ?? flight.destination ?? '---')
+    const route = String(flight.route ?? `${origin}→${destination}`)
+    const directionValue = String(flight.direction ?? flight.type ?? flight.arrivalDeparture ?? flight.operation ?? flight.flightType ?? '').toUpperCase()
     const isArrival = flight.isArrival === true || flight.arrival === true || directionValue.includes('ARR') || directionValue === 'A'
     const direction: FlightDirection = isArrival ? 'ARRIVAL' : 'DEPARTURE'
+    const categoryValue = String(flight.category ?? '').toUpperCase()
+    const flightType: FlightTab = categoryValue.includes('DOMESTIC') ? 'DOM' : categoryValue.includes('ADHOC') ? 'ADHOC' : 'INT'
+    const apiStatus = String(flight.status ?? 'PENDING').toUpperCase()
+    const status = apiStatus === 'LANDED' || apiStatus === 'ARRIVED' || apiStatus === 'COMPLETED' ? 'COMPLETED' : apiStatus === 'DEPARTED' ? 'DEPARTED' : apiStatus === 'REFUELING' ? 'REFUELING' : 'PENDING'
     return {
       id: String(flight.id ?? flight.flightId ?? flightNo),
       flightNo,
-      airline: String(flight.airline ?? flight.operator ?? 'UNKNOWN'),
+      airline: String(flight.airline ?? flight.airlineCode ?? flight.operator ?? 'UNKNOWN'),
       aircraftType: String(flight.aircraftType ?? flight.aircraft_type ?? flight.aircraft ?? '---'),
-      registration: String(flight.registration ?? flight.reg ?? '---'),
+      registration: String(flight.registration ?? flight.reg ?? flight.aircraftRegistration ?? '---'),
       route,
-      sta: String(flight.sta ?? flight.scheduledArrival ?? '--:--'),
-      eta: String(flight.eta ?? flight.estimatedArrival ?? '--:--'),
-      std: String(flight.std ?? flight.scheduledDeparture ?? '--:--'),
+      sta: isArrival ? String(flight.scheduledTime ?? flight.sta ?? '--:--') : '--:--',
+      eta: String(flight.estimatedTime ?? flight.eta ?? flight.estimatedArrival ?? '--:--'),
+      std: isArrival ? '--:--' : String(flight.scheduledTime ?? flight.std ?? flight.scheduledDeparture ?? '--:--'),
       operator: String(flight.assignedOperator ?? flight.operator ?? 'UNASSIGNED'),
-      status: String(flight.status ?? 'PENDING').toUpperCase() as Flight['status'],
-      flightType: String(flight.type ?? flight.category ?? '').toUpperCase() as FlightTab,
+      status,
+      flightType,
       direction,
     }
   })
