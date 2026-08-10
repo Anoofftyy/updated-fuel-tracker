@@ -193,6 +193,10 @@ function IconBell({ size = 20, color = '#8899bb' }: { size?: number; color?: str
   )
 }
 
+function IconFollowed({ active }: { active?: boolean }) {
+  return <IconBell size={20} color={active ? '#3b9edd' : '#4a5a72'} />
+}
+
 function IconSettings({ size = 20, color = '#8899bb' }: { size?: number; color?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -311,8 +315,10 @@ function IconRefresh({ size = 20, color = '#8899bb' }: { size?: number; color?: 
 // ── Types ────────────────────────────────────────────────────────────────────
 
 type Screen = 'login' | 'app'
-type Tab = 'refueling' | 'density' | 'more'
+type Tab = 'refueling' | 'followed' | 'density' | 'more'
 type FlightTab = 'INT' | 'DOM' | 'ADHOC'
+type FlightDirection = 'ARRIVAL' | 'DEPARTURE'
+type ReminderMinutes = 20 | 15 | 10 | 5 | 0
 type Theme = 'dark' | 'black' | 'light'
 
 interface Flight {
@@ -329,6 +335,7 @@ interface Flight {
   status: 'DEPARTED' | 'REFUELING' | 'PENDING' | 'COMPLETED'
   paymentType?: string
   flightType?: FlightTab
+  direction?: FlightDirection
 }
 
 const FLIGHTS_ENDPOINT = import.meta.env.PROD ? '/.netlify/functions/flights' : 'https://fis.com.mv/api/flights'
@@ -341,6 +348,9 @@ function normalizeFlights(payload: unknown): Flight[] {
     const flight = item as Record<string, unknown>
     const flightNo = String(flight.flightNo ?? flight.flight_number ?? flight.flight ?? flight.callsign ?? `FLIGHT-${index + 1}`)
     const route = String(flight.route ?? `${flight.origin ?? 'MLE'}→${flight.destination ?? '---'}`)
+    const directionValue = String(flight.direction ?? flight.arrivalDeparture ?? flight.operation ?? flight.flightType ?? '').toUpperCase()
+    const isArrival = flight.isArrival === true || flight.arrival === true || directionValue.includes('ARR') || directionValue === 'A'
+    const direction: FlightDirection = isArrival ? 'ARRIVAL' : 'DEPARTURE'
     return {
       id: String(flight.id ?? flight.flightId ?? flightNo),
       flightNo,
@@ -354,6 +364,7 @@ function normalizeFlights(payload: unknown): Flight[] {
       operator: String(flight.assignedOperator ?? flight.operator ?? 'UNASSIGNED'),
       status: String(flight.status ?? 'PENDING').toUpperCase() as Flight['status'],
       flightType: String(flight.type ?? flight.category ?? '').toUpperCase() as FlightTab,
+      direction,
     }
   })
 }
@@ -370,6 +381,25 @@ function notifyFlightUpdate(flight: Flight) {
   }
 }
 
+function notifyFlightReminder(flight: Flight, minutes: ReminderMinutes) {
+  if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+    new Notification(minutes === 0 ? `${flight.flightNo} has arrived` : `${flight.flightNo} arrives in ${minutes} minutes`, { body: `${flight.airline} · ETA ${flight.eta}` })
+  }
+}
+
+function etaTimestamp(eta: string) {
+  const match = eta.match(/^(\d{1,2}):(\d{2})$/)
+  if (!match) return Number.isNaN(Date.parse(eta)) ? null : Date.parse(eta)
+  const date = new Date()
+  date.setHours(Number(match[1]), Number(match[2]), 0, 0)
+  return date.getTime()
+}
+
+function openFlightRadar(flightNo: string) {
+  const searchTerm = flightNo.replace(/\s+/g, '')
+  window.open(`https://www.flightradar24.com/data/flights/${encodeURIComponent(searchTerm)}`, '_blank', 'noopener,noreferrer')
+}
+
 function decodeVapidKey(value: string) {
   const padding = '='.repeat((4 - value.length % 4) % 4)
   const normalized = (value + padding).replace(/-/g, '+').replace(/_/g, '/')
@@ -377,7 +407,7 @@ function decodeVapidKey(value: string) {
   return Uint8Array.from(raw, character => character.charCodeAt(0)).buffer
 }
 
-async function syncPushSubscription(flightIds: Set<string>) {
+async function syncPushSubscription(flightIds: Set<string>, reminders: Record<string, ReminderMinutes> = {}) {
   if (!('serviceWorker' in navigator) || !('PushManager' in window) || typeof Notification === 'undefined' || Notification.permission !== 'granted') return
 
   try {
@@ -393,7 +423,7 @@ async function syncPushSubscription(flightIds: Set<string>) {
     await fetch('/.netlify/functions/push-subscribe', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ subscription: subscription.toJSON(), flightIds: [...flightIds] }),
+      body: JSON.stringify({ subscription: subscription.toJSON(), flightIds: [...flightIds], reminders }),
     })
   } catch (error) {
     console.warn('Push notifications could not be enabled.', error)
@@ -419,10 +449,83 @@ const FLIGHTS_ADHOC: Flight[] = [
   { id: 'a1', flightNo: 'PVTJET01', airline: 'PRIVATE CHARTER', aircraftType: 'G650', registration: 'M-LVIP', route: 'MLE→DXB', sta: '--:--', eta: '13:00', std: '14:30', operator: 'AS', status: 'REFUELING' },
 ]
 
+interface StaffUser {
+  rcNumber: string
+  name: string
+}
+
+const STAFF_USERS: StaffUser[] = [
+  { rcNumber: 'A-10608', name: 'Moosa Aiman' },
+  { rcNumber: 'A-10609', name: 'Mohamed Shamikh Ahmed' },
+  { rcNumber: 'A-10721', name: 'Abdul Qadir' },
+  { rcNumber: 'A-10785', name: 'Hassan Sammah' },
+  { rcNumber: 'A-2708', name: 'Mohamed Ameez' },
+  { rcNumber: 'A-3036', name: 'Ahmed Jumail' },
+  { rcNumber: 'A-3046', name: 'Mohamed Ashhad' },
+  { rcNumber: 'A-3047', name: 'Ali Ibrahim' },
+  { rcNumber: 'A-3162', name: 'Sam aan Moosa' },
+  { rcNumber: 'A-3166', name: 'Tholal Mohamed' },
+  { rcNumber: 'A-3287', name: 'Nafiu Jameel' },
+  { rcNumber: 'A-3292', name: 'Ali Shihaan' },
+  { rcNumber: 'A-3639', name: 'Hussain Asir' },
+  { rcNumber: 'A-3968', name: 'Moosa Reehan' },
+  { rcNumber: 'A-4707', name: 'Mohamed Naveez' },
+  { rcNumber: 'A-4716', name: 'Mohamed Munawwaru' },
+  { rcNumber: 'A-4718', name: 'Mohamed Naseem' },
+  { rcNumber: 'A-5055', name: 'Ahmed Aslam' },
+  { rcNumber: 'A-5384', name: 'Jazleen Jaufar' },
+  { rcNumber: 'A-5438', name: 'Ahmed Ashfaq' },
+  { rcNumber: 'A-5582', name: 'Abdulla Mushfiq' },
+  { rcNumber: 'A-5811', name: 'Mohamed Maadhih' },
+  { rcNumber: 'A-5989', name: 'Ahmed Jinaan' },
+  { rcNumber: 'A-6102', name: 'Hussain Shinaan' },
+  { rcNumber: 'A-6155', name: 'Afsah Abdulla Adam' },
+  { rcNumber: 'A-6252', name: 'Hassan Shahum' },
+  { rcNumber: 'A-6422', name: 'Hassan Naajee' },
+  { rcNumber: 'A-6600', name: 'Ibrahim Hamdhan' },
+  { rcNumber: 'A-6606', name: 'Ahmed Azhan' },
+  { rcNumber: 'A-6780', name: 'Hassan Abdulla' },
+  { rcNumber: 'A-7000', name: 'Ahmed Alaf' },
+  { rcNumber: 'A-7265', name: 'Rajwan Ibrahim' },
+  { rcNumber: 'A-7271', name: 'Anoof Shareef' },
+  { rcNumber: 'A-7282', name: 'Ahusan Abdulla' },
+  { rcNumber: 'A-7302', name: 'Saif Mohamed' },
+  { rcNumber: 'A-7323', name: 'Abdul Qadir Ibrahim' },
+  { rcNumber: 'A-7449', name: 'Ismail Zabeeh' },
+  { rcNumber: 'A-7483', name: 'Mauman Aslam' },
+  { rcNumber: 'A-7523', name: 'Ahmed Naushad' },
+  { rcNumber: 'A-7708', name: 'Mohamed Risaal Rasheed' },
+  { rcNumber: 'A-7881', name: 'Ahmed Humaam' },
+  { rcNumber: 'A-8026', name: 'Mohamed Jumaan' },
+  { rcNumber: 'A-8027', name: 'Ali Razzan Hassan Rasheed' },
+  { rcNumber: 'A-8276', name: 'Hassan Ashfag Mohamed' },
+  { rcNumber: 'A-8288', name: 'Mohamed Shaikhan Shiham' },
+  { rcNumber: 'A-8369', name: 'Ahmed Ibrahim' },
+  { rcNumber: 'A-8581', name: 'Ali Muneef' },
+  { rcNumber: 'A-8724', name: 'Ali Aleef' },
+  { rcNumber: 'A-9043', name: 'Nishan Shakir' },
+  { rcNumber: 'A-9117', name: 'Ahmed Tholaal' },
+  { rcNumber: 'A-9168', name: 'Ali Sinaan' },
+  { rcNumber: 'A-10985', name: 'Ibrahim Sabooh Salah' },
+  { rcNumber: 'A-10984', name: "Iz'aan Shaukath" },
+]
+
 // ── Login Screen ─────────────────────────────────────────────────────────────
 
-function LoginScreen({ onLogin }: { onLogin: () => void }) {
+function LoginScreen({ onLogin }: { onLogin: (user: StaffUser) => void }) {
   const [credential, setCredential] = useState('')
+  const [error, setError] = useState('')
+
+  const submitLogin = () => {
+    const normalizedCredential = credential.trim().toUpperCase()
+    const user = STAFF_USERS.find(staffUser => staffUser.rcNumber === normalizedCredential)
+    if (!user) {
+      setError('Enter a valid RC number from your staff account.')
+      return
+    }
+    setError('')
+    onLogin(user)
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6" style={{ background: '#0b1120' }}>
@@ -445,31 +548,28 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
 
         {/* Input */}
         <div className="mb-4">
-          <label style={{ display: 'block', fontWeight: 700, fontSize: '0.7rem', letterSpacing: '0.12em', color: '#8899bb', marginBottom: '8px' }}>
-            EMAIL OR RC NUMBER
-          </label>
           <div
-            className="flex items-center gap-3 px-4 py-3.5 rounded-xl"
+            className="flex items-center px-4 py-3.5 rounded-xl"
             style={{ background: '#1a2540', border: '1px solid rgba(255,255,255,0.08)' }}
           >
-            <IconCard size={18} color="#4a5a72" />
             <input
               type="text"
-              placeholder="Email or RC Number"
+              placeholder="Enter RC number"
               value={credential}
               onChange={e => setCredential(e.target.value)}
               style={{
                 background: 'transparent', border: 'none', outline: 'none',
                 color: '#fff', fontSize: '0.9rem', width: '100%',
               }}
-              onKeyDown={e => e.key === 'Enter' && onLogin()}
+              onKeyDown={e => e.key === 'Enter' && submitLogin()}
             />
           </div>
+          {error && <p style={{ color: '#ef4444', fontSize: '0.72rem', marginTop: '8px' }}>{error}</p>}
         </div>
 
         {/* Primary button */}
         <button
-          onClick={onLogin}
+          onClick={submitLogin}
           className="w-full flex items-center justify-center gap-3 py-4 rounded-xl mb-6"
           style={{
             background: 'linear-gradient(135deg, #2980c4, #3b9edd)',
@@ -565,14 +665,7 @@ function DashboardScreen() {
 
 // ── Flight Card ───────────────────────────────────────────────────────────────
 
-function FlightCard({ flight, followed, onFollow }: { flight: Flight; followed: boolean; onFollow: () => void }) {
-  const statusStyle = (s: string) => {
-    if (s === 'DEPARTED') return { background: 'rgba(59,158,221,0.12)', color: '#3b9edd', border: '1px solid rgba(59,158,221,0.3)' }
-    if (s === 'REFUELING') return { background: 'rgba(34,197,94,0.12)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.3)' }
-    if (s === 'COMPLETED') return { background: 'rgba(34,197,94,0.12)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.3)' }
-    return { background: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)' }
-  }
-
+function FlightCard({ flight, followed, reminder, onFollow, onReminder }: { flight: Flight; followed: boolean; reminder?: ReminderMinutes; onFollow: () => void; onReminder?: (minutes: ReminderMinutes) => void }) {
   return (
     <div className="rounded-2xl mb-3 overflow-hidden" style={{ background: '#131c2e', border: '1px solid rgba(255,255,255,0.07)' }}>
       <div className="p-4 pb-3">
@@ -622,22 +715,32 @@ function FlightCard({ flight, followed, onFollow }: { flight: Flight; followed: 
         ))}
       </div>
       <div className="flex items-center justify-between px-4 py-3">
+        <div />
         <div className="flex items-center gap-2">
-          <div className="flex items-center justify-center rounded-md" style={{ width: 22, height: 22, background: '#1a2540', fontSize: '0.65rem', fontWeight: 700, color: '#8899bb', border: '1px solid rgba(255,255,255,0.08)' }}>
-            {flight.operator === 'UNASSIGNED' ? 'U' : flight.operator.charAt(0)}
-          </div>
-          <span style={{ fontSize: '0.7rem', fontWeight: 600, color: flight.operator === 'UNASSIGNED' ? '#4a5a72' : '#8899bb' }}>
-            {flight.operator}
-            {flight.operator === 'UNASSIGNED' && <span style={{ color: '#3a4a62', marginLeft: '4px' }}>(OP)</span>}
-          </span>
+          {followed && onReminder && (
+            <select
+              aria-label={`Reminder for ${flight.flightNo}`}
+              value={reminder ?? 0}
+              onChange={event => onReminder(Number(event.target.value) as ReminderMinutes)}
+              className="px-2 py-1.5 rounded-lg"
+              style={{ background: '#1a2540', color: '#8899bb', border: '1px solid rgba(255,255,255,0.08)', fontSize: '0.65rem', outline: 'none' }}
+            >
+              <option value={20}>20 min</option>
+              <option value={15}>15 min</option>
+              <option value={10}>10 min</option>
+              <option value={5}>5 min</option>
+              <option value={0}>On arrival</option>
+            </select>
+          )}
+          <button
+            onClick={() => openFlightRadar(flight.flightNo)}
+            aria-label={`Track ${flight.flightNo} on Flightradar24`}
+            className="px-3 py-1.5 rounded-lg"
+            style={{ background: 'rgba(59,158,221,0.12)', color: '#5bb8f5', border: '1px solid rgba(59,158,221,0.3)', fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.08em', cursor: 'pointer' }}
+          >
+            TRACK
+          </button>
         </div>
-        <button
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg"
-          style={{ ...statusStyle(flight.status), fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.08em', cursor: 'pointer' }}
-        >
-          {flight.status === 'DEPARTED' && <IconDeparture size={12} color={statusStyle(flight.status).color} />}
-          {flight.status}
-        </button>
       </div>
     </div>
   )
@@ -645,10 +748,14 @@ function FlightCard({ flight, followed, onFollow }: { flight: Flight; followed: 
 
 // ── Flight Refueling Screen ───────────────────────────────────────────────────
 
-function RefuelingScreen({ flights, followedFlights, onFollow }: { flights: Flight[]; followedFlights: Set<string>; onFollow: (flight: Flight) => void }) {
+function RefuelingScreen({ flights, followedFlights, reminders, onFollow, onReminder }: { flights: Flight[]; followedFlights: Set<string>; reminders: Record<string, ReminderMinutes>; onFollow: (flight: Flight) => void; onReminder: (flightId: string, minutes: ReminderMinutes) => void }) {
   const [flightTab, setFlightTab] = useState<FlightTab>('INT')
+  const [direction, setDirection] = useState<'ALL' | FlightDirection>('ALL')
 
-  const visibleFlights = flights.filter(flight => (flight.flightType || (flight.flightNo.startsWith('PVT') ? 'ADHOC' : flight.id.startsWith('d') ? 'DOM' : 'INT')) === flightTab)
+  const visibleFlights = flights.filter(flight =>
+    (flight.flightType || (flight.flightNo.startsWith('PVT') ? 'ADHOC' : flight.id.startsWith('d') ? 'DOM' : 'INT')) === flightTab &&
+    (direction === 'ALL' || (flight.direction ?? 'DEPARTURE') === direction)
+  )
   const sectionLabel = flightTab === 'INT' ? 'INTERNATIONAL OPERATIONS' : flightTab === 'DOM' ? 'DOMESTIC OPERATIONS' : 'ADHOC OPERATIONS'
 
   return (
@@ -679,6 +786,13 @@ function RefuelingScreen({ flights, followedFlights, onFollow }: { flights: Flig
           <IconUser size={16} color="#8899bb" />
         </button>
       </div>
+      <div className="flex items-center gap-2 px-4 py-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        {(['ALL', 'ARRIVAL', 'DEPARTURE'] as const).map(option => (
+          <button key={option} onClick={() => setDirection(option)} className="flex-1 py-2 rounded-lg" style={{ background: direction === option ? 'rgba(59,158,221,0.16)' : '#1a2540', color: direction === option ? '#5bb8f5' : '#8899bb', border: '1px solid rgba(255,255,255,0.08)', fontSize: '0.65rem', fontWeight: 700, cursor: 'pointer' }}>
+            {option === 'ALL' ? 'ALL' : option === 'ARRIVAL' ? 'ARRIVALS' : 'DEPARTURES'}
+          </button>
+        ))}
+      </div>
 
       {/* Flights list */}
       <div className="flex-1 overflow-y-auto px-4 pt-4">
@@ -692,8 +806,35 @@ function RefuelingScreen({ flights, followedFlights, onFollow }: { flights: Flig
           </span>
         </div>
         {visibleFlights.length === 0 && <div className="rounded-xl p-5 text-center" style={{ background: '#131c2e', color: '#8899bb' }}>No flights available in this category.</div>}
-        {visibleFlights.map(f => <FlightCard key={f.id} flight={f} followed={followedFlights.has(f.id)} onFollow={() => onFollow(f)} />)}
+        {visibleFlights.map(f => <FlightCard key={f.id} flight={f} followed={followedFlights.has(f.id)} reminder={reminders[f.id]} onFollow={() => onFollow(f)} onReminder={minutes => onReminder(f.id, minutes)} />)}
       </div>
+    </div>
+  )
+}
+
+function FollowedFlightsScreen({ flights, followedFlights, reminders, onFollow, onReminder }: { flights: Flight[]; followedFlights: Set<string>; reminders: Record<string, ReminderMinutes>; onFollow: (flight: Flight) => void; onReminder: (flightId: string, minutes: ReminderMinutes) => void }) {
+  const followed = flights.filter(flight => followedFlights.has(flight.id))
+
+  return (
+    <div className="p-4 overflow-y-auto" style={{ height: '100%' }}>
+      <div className="flex items-end justify-between mb-5">
+        <div>
+          <p style={{ color: '#4a5a72', fontSize: '0.7rem', fontWeight: 600, letterSpacing: '0.15em' }}>PERSONAL WATCHLIST</p>
+          <h2 style={{ color: '#fff', fontWeight: 800, fontSize: '1.3rem', marginTop: '2px' }}>Followed Flights</h2>
+        </div>
+        <span className="px-3 py-1 rounded-full" style={{ background: '#1a2540', border: '1px solid rgba(255,255,255,0.1)', fontSize: '0.7rem', fontWeight: 700, color: '#d0ddf0' }}>
+          {followed.length}
+        </span>
+      </div>
+      {followed.length === 0 ? (
+        <div className="rounded-2xl p-6 text-center" style={{ background: '#131c2e', border: '1px solid rgba(255,255,255,0.07)' }}>
+          <IconBell size={30} color="#4a5a72" />
+          <p style={{ color: '#fff', fontWeight: 700, marginTop: '12px' }}>No followed flights</p>
+          <p style={{ color: '#8899bb', fontSize: '0.78rem', marginTop: '6px', lineHeight: 1.5 }}>Tap the bell on any flight to add it to your watchlist.</p>
+        </div>
+      ) : (
+        followed.map(flight => <FlightCard key={flight.id} flight={flight} followed reminder={reminders[flight.id]} onFollow={() => onFollow(flight)} onReminder={minutes => onReminder(flight.id, minutes)} />)
+      )}
     </div>
   )
 }
@@ -702,7 +843,7 @@ function DensityMeasureScreen() {
   const [onboardFuel, setOnboardFuel] = useState('')
   const [setFuel, setSetFuel] = useState('')
   const [density, setDensity] = useState('')
-  const fuelDifference = Number(onboardFuel) - Number(setFuel)
+  const fuelDifference = Number(setFuel) - Number(onboardFuel)
   const densityResult = Number(density) > 0 ? fuelDifference / Number(density) : 0
 
   const inputStyle = { background: '#1a2540', border: '1px solid rgba(255,255,255,0.08)', color: '#fff', outline: 'none', width: '100%', padding: '14px', borderRadius: '10px', fontSize: '1rem' }
@@ -922,7 +1063,8 @@ function SideDrawer({ open, onClose, activeTab, onNav, onSignOut }: {
   onSignOut: () => void
 }) {
   const navItems: { label: string; tab: Tab; Icon: React.FC<{ active?: boolean }> }[] = [
-    { label: 'Flight Tracking', tab: 'refueling', Icon: IconPlane },
+    { label: 'Flights', tab: 'refueling', Icon: IconPlane },
+    { label: 'Followed Flights', tab: 'followed', Icon: IconFollowed },
     { label: 'Density Measure', tab: 'density', Icon: IconDensity },
   ]
 
@@ -1051,9 +1193,10 @@ function TacticalUpdatesPanel({ open, onClose }: { open: boolean; onClose: () =>
 
 // ── System Settings Panel ─────────────────────────────────────────────────────
 
-function SystemSettingsPanel({ open, onClose, theme, setTheme }: {
+function SystemSettingsPanel({ open, onClose, theme, setTheme, user }: {
   open: boolean; onClose: () => void
   theme: Theme; setTheme: (t: Theme) => void
+  user: StaffUser
 }) {
   const [haptic, setHaptic] = useState(true)
   const [reducedMotion, setReducedMotion] = useState(false)
@@ -1172,8 +1315,8 @@ function SystemSettingsPanel({ open, onClose, theme, setTheme }: {
           </div>
           <div className="ml-3">
             <div style={{ fontSize: '0.62rem', fontWeight: 600, letterSpacing: '0.1em', color: '#4a5a72' }}>AUTHENTICATED USER</div>
-            <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#fff' }}>ANOOF SHAREEF</div>
-            <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#3b9edd' }}>ITP HD_OPERATOR</div>
+            <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#fff' }}>{user.name.toUpperCase()}</div>
+            <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#3b9edd' }}>{user.rcNumber} · STAFF ACCOUNT</div>
           </div>
         </div>
 
@@ -1296,12 +1439,16 @@ function Toast({ show, message, onDismiss }: { show: boolean; message: string; o
 
 // ── Main App Shell ────────────────────────────────────────────────────────────
 
-function AppShell({ onSignOut }: { onSignOut: () => void }) {
+function AppShell({ onSignOut, user }: { onSignOut: () => void; user: StaffUser }) {
   const [activeTab, setActiveTab] = useState<Tab>('refueling')
   const [flights, setFlights] = useState<Flight[]>([...FLIGHTS_INT, ...FLIGHTS_DOM, ...FLIGHTS_ADHOC])
   const [followedFlights, setFollowedFlights] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem('followed-flight-ids') ?? '[]')) }
     catch { return new Set() }
+  })
+  const [reminders, setReminders] = useState<Record<string, ReminderMinutes>>(() => {
+    try { return JSON.parse(localStorage.getItem('flight-reminders') ?? '{}') }
+    catch { return {} }
   })
   const followedFlightsRef = useRef(followedFlights)
   const previousFlightsRef = useRef<Flight[]>([])
@@ -1316,8 +1463,34 @@ function AppShell({ onSignOut }: { onSignOut: () => void }) {
 
   useEffect(() => {
     localStorage.setItem('followed-flight-ids', JSON.stringify([...followedFlights]))
-    void syncPushSubscription(followedFlights)
-  }, [followedFlights])
+    localStorage.setItem('flight-reminders', JSON.stringify(reminders))
+    void syncPushSubscription(followedFlights, reminders)
+  }, [followedFlights, reminders])
+
+  useEffect(() => {
+    const checkReminders = () => {
+      const now = Date.now()
+      const fired = JSON.parse(localStorage.getItem('fired-flight-reminders') ?? '{}') as Record<string, boolean>
+      let changed = false
+      flights.forEach(flight => {
+        if (!followedFlights.has(flight.id)) return
+        const eta = etaTimestamp(flight.eta)
+        if (!eta) return
+        const minutes = reminders[flight.id] ?? 0
+        const due = minutes === 0 ? now >= eta : now >= eta - minutes * 60_000
+        const key = `${flight.id}:${minutes}:${new Date(eta).toDateString()}`
+        if (due && !fired[key]) {
+          notifyFlightReminder(flight, minutes)
+          fired[key] = true
+          changed = true
+        }
+      })
+      if (changed) localStorage.setItem('fired-flight-reminders', JSON.stringify(fired))
+    }
+    checkReminders()
+    const timer = window.setInterval(checkReminders, 60_000)
+    return () => window.clearInterval(timer)
+  }, [flights, followedFlights, reminders])
 
   useEffect(() => {
     let cancelled = false
@@ -1352,13 +1525,25 @@ function AppShell({ onSignOut }: { onSignOut: () => void }) {
     const nextFollowedFlights = new Set(followedFlights)
     if (isFollowed) nextFollowedFlights.delete(flight.id)
     else nextFollowedFlights.add(flight.id)
+    if (isFollowed) {
+      setReminders(current => {
+        const next = { ...current }
+        delete next[flight.id]
+        return next
+      })
+    }
     setFollowedFlights(nextFollowedFlights)
     if (!isFollowed) requestFlightNotifications(flight)
     await syncPushSubscription(nextFollowedFlights)
   }
 
+  const handleReminder = (flightId: string, minutes: ReminderMinutes) => {
+    setReminders(current => ({ ...current, [flightId]: minutes }))
+  }
+
   const tabs: { tab: Tab; Icon: React.FC<{ active?: boolean }>; label: string }[] = [
-    { tab: 'refueling', Icon: IconPlane, label: 'Refueling' },
+    { tab: 'refueling', Icon: IconPlane, label: 'Flights' },
+    { tab: 'followed', Icon: IconFollowed, label: 'Followed' },
     { tab: 'density', Icon: IconDensity, label: 'Density' },
     { tab: 'more', Icon: IconSliders, label: 'More' },
   ]
@@ -1395,14 +1580,15 @@ function AppShell({ onSignOut }: { onSignOut: () => void }) {
             className="flex items-center justify-center rounded-xl"
             style={{ width: 38, height: 38, background: '#1a2540', border: '1px solid rgba(255,255,255,0.12)', cursor: 'pointer', fontWeight: 800, fontSize: '0.75rem', color: '#d0ddf0' }}
           >
-            AS
+            {user.name.split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase()}
           </button>
         </div>
       </div>
 
       {/* Content */}
       <div style={{ flex: 1, overflow: 'hidden' }}>
-        {activeTab === 'refueling' && <RefuelingScreen flights={flights} followedFlights={followedFlights} onFollow={handleFollow} />}
+        {activeTab === 'refueling' && <RefuelingScreen flights={flights} followedFlights={followedFlights} reminders={reminders} onFollow={handleFollow} onReminder={handleReminder} />}
+        {activeTab === 'followed' && <FollowedFlightsScreen flights={flights} followedFlights={followedFlights} reminders={reminders} onFollow={handleFollow} onReminder={handleReminder} />}
         {activeTab === 'density' && <DensityMeasureScreen />}
       </div>
 
@@ -1438,7 +1624,7 @@ function AppShell({ onSignOut }: { onSignOut: () => void }) {
       {/* Overlays */}
       <SideDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} activeTab={activeTab} onNav={setActiveTab} onSignOut={onSignOut} />
       <TacticalUpdatesPanel open={tacticalOpen} onClose={() => setTacticalOpen(false)} />
-      <SystemSettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} theme={theme} setTheme={setTheme} />
+      <SystemSettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} theme={theme} setTheme={setTheme} user={user} />
       <MoreOptionsSheet open={moreOpen} onClose={() => setMoreOpen(false)} onSettings={() => setSettingsOpen(true)} onSignOut={onSignOut} />
       <Toast show={toast.show} message={toast.message} onDismiss={() => setToast(t => ({ ...t, show: false }))} />
     </div>
@@ -1449,8 +1635,9 @@ function AppShell({ onSignOut }: { onSignOut: () => void }) {
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('login')
+  const [user, setUser] = useState<StaffUser | null>(null)
 
   return screen === 'login'
-    ? <LoginScreen onLogin={() => setScreen('app')} />
-    : <AppShell onSignOut={() => setScreen('login')} />
+    ? <LoginScreen onLogin={authenticatedUser => { setUser(authenticatedUser); setScreen('app') }} />
+    : <AppShell user={user!} onSignOut={() => { setUser(null); setScreen('login') }} />
 }
