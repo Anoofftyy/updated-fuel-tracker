@@ -1,0 +1,10 @@
+{
+  "name": "Fuel Services",
+  "short_name": "Fuel Services",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b1120",
+  "theme_color": "#0b1120",
+  "description": "Fuel management and flight tracking",
+  "icons": []
+}
