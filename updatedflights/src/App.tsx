@@ -546,15 +546,6 @@ function LoginScreen({ onLogin }: { onLogin: (user: StaffUser) => void }) {
           <div className="mb-5">
             <HexLogo size={96} animated />
           </div>
-          <input
-            type="password"
-            placeholder="Enter password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && submitLogin()}
-            className="mt-3 w-full px-4 py-3.5 rounded-xl"
-            style={{ background: '#1a2540', border: '1px solid rgba(255,255,255,0.08)', outline: 'none', color: '#fff', fontSize: '0.9rem' }}
-          />
           <h1 style={{ fontFamily: 'Inter', fontWeight: 900, fontSize: '2rem', letterSpacing: '0.05em', color: '#fff' }}>
             FUEL SERVICES
           </h1>
@@ -564,7 +555,7 @@ function LoginScreen({ onLogin }: { onLogin: (user: StaffUser) => void }) {
         </div>
 
         {/* Input */}
-        <div className="mb-4">
+        <div className="mb-4 space-y-4">
           <div
             className="flex items-center px-4 py-3.5 rounded-xl"
             style={{ background: '#1a2540', border: '1px solid rgba(255,255,255,0.08)' }}
@@ -579,6 +570,24 @@ function LoginScreen({ onLogin }: { onLogin: (user: StaffUser) => void }) {
                 color: '#fff', fontSize: '0.9rem', width: '100%',
               }}
               onKeyDown={e => e.key === 'Enter' && submitLogin()}
+              autoComplete="username"
+            />
+          </div>
+          <div
+            className="flex items-center px-4 py-3.5 rounded-xl"
+            style={{ background: '#1a2540', border: '1px solid rgba(255,255,255,0.08)' }}
+          >
+            <input
+              type="password"
+              placeholder="Enter password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && submitLogin()}
+              style={{
+                background: 'transparent', border: 'none', outline: 'none',
+                color: '#fff', fontSize: '0.9rem', width: '100%',
+              }}
+              autoComplete="current-password"
             />
           </div>
           {error && <p style={{ color: '#ef4444', fontSize: '0.72rem', marginTop: '8px' }}>{error}</p>}
