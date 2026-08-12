@@ -791,7 +791,7 @@ function FlightCard({ flight, followed, reminder, onFollow, onReminder }: { flig
 
 // ── Flight Refueling Screen ───────────────────────────────────────────────────
 
-function RefuelingScreen({ flights, followedFlights, reminders, onFollow, onReminder, duty }: { flights: Flight[]; followedFlights: Set<string>; reminders: Record<string, ReminderMinutes>; onFollow: (flight: Flight) => void; onReminder: (flightId: string, minutes: ReminderMinutes) => void; duty: Duty }) {
+function RefuelingScreen({ flights, followedFlights, reminders, onFollow, onReminder, duty, hideDeparted, hideLanded }: { flights: Flight[]; followedFlights: Set<string>; reminders: Record<string, ReminderMinutes>; onFollow: (flight: Flight) => void; onReminder: (flightId: string, minutes: ReminderMinutes) => void; duty: Duty; hideDeparted: boolean; hideLanded: boolean }) {
   const [flightTab, setFlightTab] = useState<FlightTab>('INT')
   const [direction, setDirection] = useState<'ALL' | FlightDirection>('ALL')
 
@@ -816,7 +816,10 @@ function RefuelingScreen({ flights, followedFlights, reminders, onFollow, onRemi
     const dirMatch = (direction === 'ALL' || (flight.direction ?? 'DEPARTURE') === direction)
     const timeCandidate = flight.std !== '--:--' ? flight.std : (flight.eta !== '--:--' ? flight.eta : flight.sta)
     const dutyMatch = inDuty(timeCandidate)
-    return typeMatch && dirMatch && dutyMatch
+    if (!typeMatch || !dirMatch || !dutyMatch) return false
+    if (hideDeparted && (flight.direction ?? 'DEPARTURE') === 'DEPARTURE' && flight.status === 'DEPARTED') return false
+    if (hideLanded && (flight.direction ?? 'DEPARTURE') === 'ARRIVAL' && flight.status === 'COMPLETED') return false
+    return true
   })
   const sectionLabel = flightTab === 'INT' ? 'INTERNATIONAL OPERATIONS' : flightTab === 'DOM' ? 'DOMESTIC OPERATIONS' : 'ADHOC OPERATIONS'
 
@@ -874,7 +877,7 @@ function RefuelingScreen({ flights, followedFlights, reminders, onFollow, onRemi
   )
 }
 
-function FollowedFlightsScreen({ flights, followedFlights, reminders, onFollow, onReminder, duty }: { flights: Flight[]; followedFlights: Set<string>; reminders: Record<string, ReminderMinutes>; onFollow: (flight: Flight) => void; onReminder: (flightId: string, minutes: ReminderMinutes) => void; duty: Duty }) {
+function FollowedFlightsScreen({ flights, followedFlights, reminders, onFollow, onReminder, duty, hideDeparted, hideLanded }: { flights: Flight[]; followedFlights: Set<string>; reminders: Record<string, ReminderMinutes>; onFollow: (flight: Flight) => void; onReminder: (flightId: string, minutes: ReminderMinutes) => void; duty: Duty; hideDeparted: boolean; hideLanded: boolean }) {
   const parseHM = (t: string) => {
     const m = t.match(/^(\d{1,2}):(\d{2})$/)
     if (!m) return null
@@ -890,7 +893,14 @@ function FollowedFlightsScreen({ flights, followedFlights, reminders, onFollow, 
     return false
   }
 
-  const followed = flights.filter(flight => followedFlights.has(flight.id) && inDuty(flight.std !== '--:--' ? flight.std : (flight.eta !== '--:--' ? flight.eta : flight.sta)))
+  const followed = flights.filter(flight => {
+    if (!followedFlights.has(flight.id)) return false
+    const timeCandidate = flight.std !== '--:--' ? flight.std : (flight.eta !== '--:--' ? flight.eta : flight.sta)
+    if (!inDuty(timeCandidate)) return false
+    if (hideDeparted && (flight.direction ?? 'DEPARTURE') === 'DEPARTURE' && flight.status === 'DEPARTED') return false
+    if (hideLanded && (flight.direction ?? 'DEPARTURE') === 'ARRIVAL' && flight.status === 'COMPLETED') return false
+    return true
+  })
 
   return (
     <div className="p-4 overflow-y-auto" style={{ height: '100%' }}>
@@ -1211,13 +1221,13 @@ function SideDrawer({ open, onClose, activeTab, onNav, onSignOut }: {
 
         {/* Bottom section */}
         <div className="px-3 pb-6" style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '12px' }}>
-          <button className="flex items-center gap-3 w-full px-3 py-3 rounded-xl mb-1" style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+          <button onClick={() => { window.open('https://macl-itp.netlify.app', '_blank', 'noopener') ; onClose() }} className="flex items-center gap-3 w-full px-3 py-3 rounded-xl mb-1" style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
             <IconHelp color="#4a5a72" />
-            <span style={{ fontWeight: 600, fontSize: '0.9rem', color: '#8899bb' }}>Help Center</span>
+            <span style={{ fontWeight: 600, fontSize: '0.9rem', color: '#8899bb' }}>ITP-OPS</span>
           </button>
-          <button className="flex items-center gap-3 w-full px-3 py-3 rounded-xl mb-1" style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+          <button onClick={() => { window.open('https://itp-logentry.netlify.app', '_blank', 'noopener') ; onClose() }} className="flex items-center gap-3 w-full px-3 py-3 rounded-xl mb-1" style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
             <IconSettings color="#4a5a72" />
-            <span style={{ fontWeight: 600, fontSize: '0.9rem', color: '#8899bb' }}>System Settings</span>
+            <span style={{ fontWeight: 600, fontSize: '0.9rem', color: '#8899bb' }}>LOG ENTRY</span>
           </button>
           <button
             onClick={() => { onClose(); onSignOut() }}
@@ -1281,10 +1291,12 @@ function TacticalUpdatesPanel({ open, onClose }: { open: boolean; onClose: () =>
 
 // ── System Settings Panel ─────────────────────────────────────────────────────
 
-function SystemSettingsPanel({ open, onClose, theme, setTheme, user }: {
+function SystemSettingsPanel({ open, onClose, theme, setTheme, user, hideDeparted, setHideDeparted, hideLanded, setHideLanded }: {
   open: boolean; onClose: () => void
   theme: Theme; setTheme: (t: Theme) => void
   user: StaffUser
+  hideDeparted: boolean; setHideDeparted: (v: boolean) => void
+  hideLanded: boolean; setHideLanded: (v: boolean) => void
 }) {
   const [haptic, setHaptic] = useState(true)
   const [reducedMotion, setReducedMotion] = useState(false)
@@ -1362,6 +1374,16 @@ function SystemSettingsPanel({ open, onClose, theme, setTheme, user }: {
             {(['morning', 'evening', 'night'] as Duty[]).map(d => (
               <button key={d} onClick={() => { try { localStorage.setItem('duty-time', d) } catch {} window.location.reload() }} className="flex-1 py-2 rounded-lg" style={{ background: '#1a2540', color: '#c0cfe0', fontWeight: 700, fontSize: '0.72rem', border: 'none', cursor: 'pointer' }}>{d[0].toUpperCase() + d.slice(1)}</button>
             ))}
+          </div>
+        </div>
+
+        {/* Hide departed/landed options */}
+        <div className="mb-6">
+          <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#fff', marginBottom: 8 }}>Hide Departed/Landed</div>
+          <div style={{ fontSize: '0.72rem', color: '#4a5a72', marginBottom: 8 }}>Control visibility of departed and landed flights</div>
+          <div className="flex gap-2">
+            <button onClick={() => { setHideDeparted(!hideDeparted) }} className="flex-1 py-2 rounded-lg" style={{ background: hideDeparted ? '#1f2a3a' : '#1a2540', color: '#c0cfe0', fontWeight: 700, fontSize: '0.72rem', border: 'none', cursor: 'pointer' }}>{hideDeparted ? 'Hide Departed: ON' : 'Hide Departed: OFF'}</button>
+            <button onClick={() => { setHideLanded(!hideLanded) }} className="flex-1 py-2 rounded-lg" style={{ background: hideLanded ? '#1f2a3a' : '#1a2540', color: '#c0cfe0', fontWeight: 700, fontSize: '0.72rem', border: 'none', cursor: 'pointer' }}>{hideLanded ? 'Hide Landed: ON' : 'Hide Landed: OFF'}</button>
           </div>
         </div>
 
@@ -1470,8 +1492,8 @@ function MoreOptionsSheet({ open, onClose, onSettings, onSignOut, theme, setThem
         </div>
         {[
           { icon: <IconMoon size={20} color="#8899bb" />, label: 'Black Mode', action: () => { setTheme('bw'); onClose() } },
-          { icon: <IconSettings size={20} color="#8899bb" />, label: 'Settings', action: () => { onClose(); onSettings() } },
-          { icon: <IconHelp size={20} color="#8899bb" />, label: 'Help Center', action: onClose },
+          { icon: <IconHelp size={20} color="#8899bb" />, label: 'ITP-OPS', action: () => { window.open('https://macl-itp.netlify.app', '_blank', 'noopener') ; onClose() } },
+          { icon: <IconSettings size={20} color="#8899bb" />, label: 'LOG ENTRY', action: () => { window.open('https://itp-logentry.netlify.app', '_blank', 'noopener') ; onClose() } },
         ].map(item => (
           <button
             key={item.label}
@@ -1542,7 +1564,13 @@ function Toast({ show, message, onDismiss }: { show: boolean; message: string; o
 
 function AppShell({ onSignOut, user }: { onSignOut: () => void; user: StaffUser }) {
   const [activeTab, setActiveTab] = useState<Tab>('refueling')
-  const [flights, setFlights] = useState<Flight[]>([...FLIGHTS_INT, ...FLIGHTS_DOM, ...FLIGHTS_ADHOC])
+  const [flights, setFlights] = useState<Flight[]>(() => {
+    try {
+      const raw = localStorage.getItem('last-flights')
+      if (raw) return JSON.parse(raw) as Flight[]
+    } catch {}
+    return [...FLIGHTS_INT, ...FLIGHTS_DOM, ...FLIGHTS_ADHOC]
+  })
   const [followedFlights, setFollowedFlights] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem('followed-flight-ids') ?? '[]')) }
     catch { return new Set() }
@@ -1559,6 +1587,8 @@ function AppShell({ onSignOut, user }: { onSignOut: () => void; user: StaffUser 
   const [moreOpen, setMoreOpen] = useState(false)
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('app-theme') as Theme) ?? 'dark')
   const [duty, setDuty] = useState<Duty>(() => (localStorage.getItem('duty-time') as Duty) ?? 'morning')
+  const [hideDeparted, setHideDeparted] = useState<boolean>(() => localStorage.getItem('hide-departed') === 'true')
+  const [hideLanded, setHideLanded] = useState<boolean>(() => localStorage.getItem('hide-landed') === 'true')
   const [toast, setToast] = useState({ show: true, message: `Welcome back, ${user.name}!` })
 
   useEffect(() => { followedFlightsRef.current = followedFlights }, [followedFlights])
@@ -1576,6 +1606,13 @@ function AppShell({ onSignOut, user }: { onSignOut: () => void; user: StaffUser 
     localStorage.setItem('flight-reminders', JSON.stringify(reminders))
     void syncPushSubscription(followedFlights, reminders)
   }, [followedFlights, reminders])
+
+  useEffect(() => {
+    try { localStorage.setItem('last-flights', JSON.stringify(flights)) } catch {}
+  }, [flights])
+
+  useEffect(() => { try { localStorage.setItem('hide-departed', String(hideDeparted)) } catch {} }, [hideDeparted])
+  useEffect(() => { try { localStorage.setItem('hide-landed', String(hideLanded)) } catch {} }, [hideLanded])
 
   useEffect(() => {
     const checkReminders = () => {
@@ -1712,9 +1749,9 @@ function AppShell({ onSignOut, user }: { onSignOut: () => void; user: StaffUser 
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, overflow: 'hidden' }}>
-        {activeTab === 'refueling' && <RefuelingScreen flights={flights} followedFlights={followedFlights} reminders={reminders} onFollow={handleFollow} onReminder={handleReminder} duty={duty} />}
-        {activeTab === 'followed' && <FollowedFlightsScreen flights={flights} followedFlights={followedFlights} reminders={reminders} onFollow={handleFollow} onReminder={handleReminder} duty={duty} />}
+      <div style={{ flex: 1, overflow: 'hidden', paddingBottom: '96px' }}>
+        {activeTab === 'refueling' && <RefuelingScreen flights={flights} followedFlights={followedFlights} reminders={reminders} onFollow={handleFollow} onReminder={handleReminder} duty={duty} hideDeparted={hideDeparted} hideLanded={hideLanded} />}
+        {activeTab === 'followed' && <FollowedFlightsScreen flights={flights} followedFlights={followedFlights} reminders={reminders} onFollow={handleFollow} onReminder={handleReminder} duty={duty} hideDeparted={hideDeparted} hideLanded={hideLanded} />}
         {activeTab === 'density' && <DensityMeasureScreen />}
       </div>
 
@@ -1724,9 +1761,17 @@ function AppShell({ onSignOut, user }: { onSignOut: () => void; user: StaffUser 
         style={{
           background: palette.tabBg,
           border: `1px solid ${palette.headerBorder}`,
-          borderRadius: '20px 20px 0 0',
+          borderRadius: '20px',
           flexShrink: 0,
           paddingBottom: 'calc(8px + env(safe-area-inset-bottom, 0px))',
+          position: 'fixed',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          bottom: '10px',
+          width: 'calc(100% - 32px)',
+          maxWidth: '480px',
+          zIndex: 60,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.35)'
         }}
       >
         {tabs.map(({ tab, Icon, label }) => {
@@ -1750,7 +1795,7 @@ function AppShell({ onSignOut, user }: { onSignOut: () => void; user: StaffUser 
       {/* Overlays */}
       <SideDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} activeTab={activeTab} onNav={setActiveTab} onSignOut={onSignOut} />
       <TacticalUpdatesPanel open={tacticalOpen} onClose={() => setTacticalOpen(false)} />
-      <SystemSettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} theme={theme} setTheme={setTheme} user={user} />
+      <SystemSettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} theme={theme} setTheme={setTheme} user={user} hideDeparted={hideDeparted} setHideDeparted={setHideDeparted} hideLanded={hideLanded} setHideLanded={setHideLanded} />
       <MoreOptionsSheet open={moreOpen} onClose={() => setMoreOpen(false)} onSettings={() => setSettingsOpen(true)} onSignOut={onSignOut} theme={theme} setTheme={setTheme} />
       <Toast show={toast.show} message={toast.message} onDismiss={() => setToast(t => ({ ...t, show: false }))} />
     </div>
