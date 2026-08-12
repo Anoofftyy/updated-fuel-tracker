@@ -34,15 +34,22 @@ function normalizeFlights(payload: unknown): Flight[] {
   if (!Array.isArray(source)) return []
   return source.map((item, index) => {
     const flight = item as Record<string, unknown>
-    const flightNo = String(flight.flightNo ?? flight.flight_number ?? flight.flight ?? flight.callsign ?? `FLIGHT-${index + 1}`)
+    const flightNo = String(flight.flightNo ?? flight.flightNumber ?? flight.flight_number ?? flight.flight ?? flight.callsign ?? `FLIGHT-${index + 1}`)
+    const origin = String(flight.originCode ?? flight.origin ?? '---')
+    const destination = String(flight.destinationCode ?? flight.destination ?? '---')
+    const route = String(flight.route ?? `${origin}→${destination}`)
+    const type = String(flight.type ?? '').toUpperCase()
+    const isArrival = type.includes('ARR') || flight.isArrival === true || flight.arrival === true
+    const apiStatus = String(flight.status ?? 'PENDING').toUpperCase()
+    const status = apiStatus === 'LANDED' || apiStatus === 'ARRIVED' || apiStatus === 'COMPLETED' ? 'COMPLETED' : apiStatus === 'DEPARTED' ? 'DEPARTED' : apiStatus === 'REFUELING' ? 'REFUELING' : 'PENDING'
     return {
       id: String(flight.id ?? flight.flightId ?? flightNo),
       flightNo,
-      airline: String(flight.airline ?? flight.operator ?? 'UNKNOWN'),
-      route: String(flight.route ?? `${flight.origin ?? 'MLE'}→${flight.destination ?? '---'}`),
-      eta: String(flight.eta ?? flight.estimatedArrival ?? '--:--'),
-      std: String(flight.std ?? flight.scheduledDeparture ?? '--:--'),
-      status: String(flight.status ?? 'PENDING').toUpperCase(),
+      airline: String(flight.airline ?? flight.airlineCode ?? flight.operator ?? 'UNKNOWN'),
+      route,
+      eta: String(flight.estimatedTime ?? flight.eta ?? flight.estimatedArrival ?? '--:--'),
+      std: isArrival ? '--:--' : String(flight.scheduledTime ?? flight.std ?? flight.scheduledDeparture ?? '--:--'),
+      status,
     }
   })
 }

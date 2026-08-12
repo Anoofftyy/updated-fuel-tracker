@@ -346,24 +346,30 @@ function normalizeFlights(payload: unknown): Flight[] {
 
   return source.map((item, index) => {
     const flight = item as Record<string, unknown>
-    const flightNo = String(flight.flightNo ?? flight.flight_number ?? flight.flight ?? flight.callsign ?? `FLIGHT-${index + 1}`)
-    const route = String(flight.route ?? `${flight.origin ?? 'MLE'}→${flight.destination ?? '---'}`)
-    const directionValue = String(flight.direction ?? flight.arrivalDeparture ?? flight.operation ?? flight.flightType ?? '').toUpperCase()
+    const flightNo = String(flight.flightNo ?? flight.flightNumber ?? flight.flight_number ?? flight.flight ?? flight.callsign ?? `FLIGHT-${index + 1}`)
+    const origin = String(flight.originCode ?? flight.origin ?? '---')
+    const destination = String(flight.destinationCode ?? flight.destination ?? '---')
+    const route = String(flight.route ?? `${origin}→${destination}`)
+    const directionValue = String(flight.direction ?? flight.type ?? flight.arrivalDeparture ?? flight.operation ?? flight.flightType ?? '').toUpperCase()
     const isArrival = flight.isArrival === true || flight.arrival === true || directionValue.includes('ARR') || directionValue === 'A'
     const direction: FlightDirection = isArrival ? 'ARRIVAL' : 'DEPARTURE'
+    const categoryValue = String(flight.category ?? '').toUpperCase()
+    const flightType: FlightTab = categoryValue.includes('DOMESTIC') ? 'DOM' : categoryValue.includes('ADHOC') ? 'ADHOC' : 'INT'
+    const apiStatus = String(flight.status ?? 'PENDING').toUpperCase()
+    const status = apiStatus === 'LANDED' || apiStatus === 'ARRIVED' || apiStatus === 'COMPLETED' ? 'COMPLETED' : apiStatus === 'DEPARTED' ? 'DEPARTED' : apiStatus === 'REFUELING' ? 'REFUELING' : 'PENDING'
     return {
       id: String(flight.id ?? flight.flightId ?? flightNo),
       flightNo,
-      airline: String(flight.airline ?? flight.operator ?? 'UNKNOWN'),
+      airline: String(flight.airline ?? flight.airlineCode ?? flight.operator ?? 'UNKNOWN'),
       aircraftType: String(flight.aircraftType ?? flight.aircraft_type ?? flight.aircraft ?? '---'),
-      registration: String(flight.registration ?? flight.reg ?? '---'),
+      registration: String(flight.registration ?? flight.reg ?? flight.aircraftRegistration ?? '---'),
       route,
-      sta: String(flight.sta ?? flight.scheduledArrival ?? '--:--'),
-      eta: String(flight.eta ?? flight.estimatedArrival ?? '--:--'),
-      std: String(flight.std ?? flight.scheduledDeparture ?? '--:--'),
+      sta: isArrival ? String(flight.scheduledTime ?? flight.sta ?? '--:--') : '--:--',
+      eta: String(flight.estimatedTime ?? flight.eta ?? flight.estimatedArrival ?? '--:--'),
+      std: isArrival ? '--:--' : String(flight.scheduledTime ?? flight.std ?? flight.scheduledDeparture ?? '--:--'),
       operator: String(flight.assignedOperator ?? flight.operator ?? 'UNASSIGNED'),
-      status: String(flight.status ?? 'PENDING').toUpperCase() as Flight['status'],
-      flightType: String(flight.type ?? flight.category ?? '').toUpperCase() as FlightTab,
+      status,
+      flightType,
       direction,
     }
   })
@@ -452,10 +458,11 @@ const FLIGHTS_ADHOC: Flight[] = [
 interface StaffUser {
   rcNumber: string
   name: string
+  password?: string
 }
 
 const STAFF_USERS: StaffUser[] = [
-  { rcNumber: 'A-10608', name: 'Moosa Aiman' },
+  { rcNumber: 'A-10608', name: 'Moosa Aiman', password: 'A-10608' },
   { rcNumber: 'A-10609', name: 'Mohamed Shamikh Ahmed' },
   { rcNumber: 'A-10721', name: 'Abdul Qadir' },
   { rcNumber: 'A-10785', name: 'Hassan Sammah' },
@@ -514,13 +521,14 @@ const STAFF_USERS: StaffUser[] = [
 
 function LoginScreen({ onLogin }: { onLogin: (user: StaffUser) => void }) {
   const [credential, setCredential] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
 
   const submitLogin = () => {
     const normalizedCredential = credential.trim().toUpperCase()
-    const user = STAFF_USERS.find(staffUser => staffUser.rcNumber === normalizedCredential)
+    const user = STAFF_USERS.find(staffUser => staffUser.rcNumber === normalizedCredential && (staffUser.password ?? staffUser.rcNumber) === password.trim().toUpperCase())
     if (!user) {
-      setError('Enter a valid RC number from your staff account.')
+      setError('Enter a valid RC number and password.')
       return
     }
     setError('')
@@ -538,6 +546,15 @@ function LoginScreen({ onLogin }: { onLogin: (user: StaffUser) => void }) {
           <div className="mb-5">
             <HexLogo size={96} animated />
           </div>
+          <input
+            type="password"
+            placeholder="Enter password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && submitLogin()}
+            className="mt-3 w-full px-4 py-3.5 rounded-xl"
+            style={{ background: '#1a2540', border: '1px solid rgba(255,255,255,0.08)', outline: 'none', color: '#fff', fontSize: '0.9rem' }}
+          />
           <h1 style={{ fontFamily: 'Inter', fontWeight: 900, fontSize: '2rem', letterSpacing: '0.05em', color: '#fff' }}>
             FUEL SERVICES
           </h1>
@@ -1457,7 +1474,7 @@ function AppShell({ onSignOut, user }: { onSignOut: () => void; user: StaffUser 
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const [theme, setTheme] = useState<Theme>('dark')
-  const [toast, setToast] = useState({ show: true, message: 'Welcome back, Anoof!' })
+  const [toast, setToast] = useState({ show: true, message: `Welcome back, ${user.name}!` })
 
   useEffect(() => { followedFlightsRef.current = followedFlights }, [followedFlights])
 
