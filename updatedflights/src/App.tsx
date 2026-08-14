@@ -319,7 +319,8 @@ type Tab = 'refueling' | 'followed' | 'density' | 'more'
 type FlightTab = 'INT' | 'DOM' | 'ADHOC'
 type FlightDirection = 'ARRIVAL' | 'DEPARTURE'
 type ReminderMinutes = 20 | 15 | 10 | 5 | 0
-type Theme = 'dark' | 'black' | 'light'
+type Theme = 'dark' | 'black' | 'light' | 'bw'
+type Duty = 'morning' | 'evening' | 'night'
 
 interface Flight {
   id: string
@@ -522,6 +523,7 @@ const STAFF_USERS: StaffUser[] = [
 function LoginScreen({ onLogin }: { onLogin: (user: StaffUser) => void }) {
   const [credential, setCredential] = useState('')
   const [password, setPassword] = useState('')
+  const [duty, setDuty] = useState<Duty>(() => (localStorage.getItem('duty-time') as Duty) ?? 'morning')
   const [error, setError] = useState('')
 
   const submitLogin = () => {
@@ -532,6 +534,7 @@ function LoginScreen({ onLogin }: { onLogin: (user: StaffUser) => void }) {
       return
     }
     setError('')
+    try { localStorage.setItem('duty-time', duty) } catch {}
     onLogin(user)
   }
 
@@ -591,6 +594,20 @@ function LoginScreen({ onLogin }: { onLogin: (user: StaffUser) => void }) {
             />
           </div>
           {error && <p style={{ color: '#ef4444', fontSize: '0.72rem', marginTop: '8px' }}>{error}</p>}
+        </div>
+
+        {/* Duty selection */}
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#8899bb', marginBottom: 8 }}>Select duty time</div>
+          <div className="flex gap-2">
+            {([
+              { id: 'morning', label: 'Morning (07:00–16:30)' },
+              { id: 'evening', label: 'Evening (15:00–23:30)' },
+              { id: 'night', label: 'Night (22:30–08:30)' },
+            ] as { id: Duty; label: string }[]).map(d => (
+              <button key={d.id} onClick={() => setDuty(d.id)} className="flex-1 py-2 rounded-lg" style={{ background: duty === d.id ? 'linear-gradient(135deg,#2980c4,#3b9edd)' : '#1a2540', color: duty === d.id ? '#fff' : '#c0cfe0', fontWeight: 700, fontSize: '0.72rem', border: 'none', cursor: 'pointer' }}>{d.label.split(' ')[0]}</button>
+            ))}
+          </div>
         </div>
 
         {/* Primary button */}
@@ -693,7 +710,7 @@ function DashboardScreen() {
 
 function FlightCard({ flight, followed, reminder, onFollow, onReminder }: { flight: Flight; followed: boolean; reminder?: ReminderMinutes; onFollow: () => void; onReminder?: (minutes: ReminderMinutes) => void }) {
   return (
-    <div className="rounded-2xl mb-3 overflow-hidden" style={{ background: '#131c2e', border: '1px solid rgba(255,255,255,0.07)' }}>
+    <div className="rounded-2xl mb-3 overflow-hidden" style={{ background: '#0b1218', border: '1px solid rgba(255,255,255,0.07)' }}>
       <div className="p-4 pb-3">
         <div className="flex items-start justify-between mb-1">
           <div className="flex items-center gap-3">
@@ -774,14 +791,33 @@ function FlightCard({ flight, followed, reminder, onFollow, onReminder }: { flig
 
 // ── Flight Refueling Screen ───────────────────────────────────────────────────
 
-function RefuelingScreen({ flights, followedFlights, reminders, onFollow, onReminder }: { flights: Flight[]; followedFlights: Set<string>; reminders: Record<string, ReminderMinutes>; onFollow: (flight: Flight) => void; onReminder: (flightId: string, minutes: ReminderMinutes) => void }) {
+function RefuelingScreen({ flights, followedFlights, reminders, onFollow, onReminder, duty }: { flights: Flight[]; followedFlights: Set<string>; reminders: Record<string, ReminderMinutes>; onFollow: (flight: Flight) => void; onReminder: (flightId: string, minutes: ReminderMinutes) => void; duty: Duty }) {
   const [flightTab, setFlightTab] = useState<FlightTab>('INT')
   const [direction, setDirection] = useState<'ALL' | FlightDirection>('ALL')
 
-  const visibleFlights = flights.filter(flight =>
-    (flight.flightType || (flight.flightNo.startsWith('PVT') ? 'ADHOC' : flight.id.startsWith('d') ? 'DOM' : 'INT')) === flightTab &&
-    (direction === 'ALL' || (flight.direction ?? 'DEPARTURE') === direction)
-  )
+  const parseHM = (t: string) => {
+    const m = t.match(/^(\d{1,2}):(\d{2})$/)
+    if (!m) return null
+    return Number(m[1]) * 60 + Number(m[2])
+  }
+  const inDuty = (t?: string | null) => {
+    const timeStr = t ?? '--:--'
+    const mins = parseHM(timeStr)
+    if (mins === null) return false
+    if (duty === 'morning') return mins >= (7 * 60) && mins <= (16 * 60 + 30)
+    if (duty === 'evening') return mins >= (15 * 60) && mins <= (23 * 60 + 30)
+    // night spans over midnight
+    if (duty === 'night') return mins >= (22 * 60 + 30) || mins <= (8 * 60 + 30)
+    return false
+  }
+
+  const visibleFlights = flights.filter(flight => {
+    const typeMatch = (flight.flightType || (flight.flightNo.startsWith('PVT') ? 'ADHOC' : flight.id.startsWith('d') ? 'DOM' : 'INT')) === flightTab
+    const dirMatch = (direction === 'ALL' || (flight.direction ?? 'DEPARTURE') === direction)
+    const timeCandidate = flight.std !== '--:--' ? flight.std : (flight.eta !== '--:--' ? flight.eta : flight.sta)
+    const dutyMatch = inDuty(timeCandidate)
+    return typeMatch && dirMatch && dutyMatch
+  })
   const sectionLabel = flightTab === 'INT' ? 'INTERNATIONAL OPERATIONS' : flightTab === 'DOM' ? 'DOMESTIC OPERATIONS' : 'ADHOC OPERATIONS'
 
   return (
@@ -838,8 +874,23 @@ function RefuelingScreen({ flights, followedFlights, reminders, onFollow, onRemi
   )
 }
 
-function FollowedFlightsScreen({ flights, followedFlights, reminders, onFollow, onReminder }: { flights: Flight[]; followedFlights: Set<string>; reminders: Record<string, ReminderMinutes>; onFollow: (flight: Flight) => void; onReminder: (flightId: string, minutes: ReminderMinutes) => void }) {
-  const followed = flights.filter(flight => followedFlights.has(flight.id))
+function FollowedFlightsScreen({ flights, followedFlights, reminders, onFollow, onReminder, duty }: { flights: Flight[]; followedFlights: Set<string>; reminders: Record<string, ReminderMinutes>; onFollow: (flight: Flight) => void; onReminder: (flightId: string, minutes: ReminderMinutes) => void; duty: Duty }) {
+  const parseHM = (t: string) => {
+    const m = t.match(/^(\d{1,2}):(\d{2})$/)
+    if (!m) return null
+    return Number(m[1]) * 60 + Number(m[2])
+  }
+  const inDuty = (t?: string | null) => {
+    const timeStr = t ?? '--:--'
+    const mins = parseHM(timeStr)
+    if (mins === null) return false
+    if (duty === 'morning') return mins >= (7 * 60) && mins <= (16 * 60 + 30)
+    if (duty === 'evening') return mins >= (15 * 60) && mins <= (23 * 60 + 30)
+    if (duty === 'night') return mins >= (22 * 60 + 30) || mins <= (8 * 60 + 30)
+    return false
+  }
+
+  const followed = flights.filter(flight => followedFlights.has(flight.id) && inDuty(flight.std !== '--:--' ? flight.std : (flight.eta !== '--:--' ? flight.eta : flight.sta)))
 
   return (
     <div className="p-4 overflow-y-auto" style={{ height: '100%' }}>
@@ -1088,6 +1139,7 @@ function SideDrawer({ open, onClose, activeTab, onNav, onSignOut }: {
   onNav: (t: Tab) => void
   onSignOut: () => void
 }) {
+  // placeholder props for duty handled by parent via localStorage in this simple change
   const navItems: { label: string; tab: Tab; Icon: React.FC<{ active?: boolean }> }[] = [
     { label: 'Flights', tab: 'refueling', Icon: IconPlane },
     { label: 'Followed Flights', tab: 'followed', Icon: IconFollowed },
@@ -1122,6 +1174,16 @@ function SideDrawer({ open, onClose, activeTab, onNav, onSignOut }: {
         <div className="flex items-center gap-3 px-5 py-5" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
           <HexLogo size={36} />
           <span style={{ fontWeight: 900, fontSize: '1.6rem', fontStyle: 'italic', color: '#3b9edd', letterSpacing: '-0.03em' }}>FMS</span>
+        </div>
+
+        {/* Duty selector in drawer for quick changes */}
+        <div className="px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+          <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#8899bb', marginBottom: 8 }}>Duty Time</div>
+          <div className="flex gap-2">
+            {(['morning', 'evening', 'night'] as Duty[]).map(d => (
+              <button key={d} onClick={() => { try { localStorage.setItem('duty-time', d) } catch {} window.location.reload() }} className="flex-1 py-2 rounded-lg" style={{ background: '#1a2540', color: '#c0cfe0', fontWeight: 700, fontSize: '0.72rem', border: 'none', cursor: 'pointer' }}>{d[0].toUpperCase() + d.slice(1)}</button>
+            ))}
+          </div>
         </div>
 
         {/* Nav items */}
@@ -1269,7 +1331,7 @@ function SystemSettingsPanel({ open, onClose, theme, setTheme, user }: {
           </div>
           <p style={{ fontSize: '0.75rem', color: '#4a5a72', marginBottom: '12px' }}>Select application theme</p>
           <div className="flex rounded-xl p-1" style={{ background: '#1a2540' }}>
-            {(['light', 'dark', 'black'] as Theme[]).map(t => (
+            {(['light', 'dark', 'black', 'bw'] as Theme[]).map(t => (
               <button
                 key={t}
                 onClick={() => setTheme(t)}
@@ -1284,9 +1346,21 @@ function SystemSettingsPanel({ open, onClose, theme, setTheme, user }: {
               >
                 {t === 'light' && '☀'}
                 {t === 'dark' && '🌙'}
-                {t === 'black' && '⏰'}
+                {t === 'black' && '⚫'}
+                {t === 'bw' && 'B/W'}
                 {t.toUpperCase()}
               </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Duty time selector in system settings */}
+        <div className="mb-6">
+          <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#fff', marginBottom: 8 }}>Duty Time</div>
+          <div style={{ fontSize: '0.72rem', color: '#4a5a72', marginBottom: 8 }}>Select which duty's flights to show by default</div>
+          <div className="flex gap-2">
+            {(['morning', 'evening', 'night'] as Duty[]).map(d => (
+              <button key={d} onClick={() => { try { localStorage.setItem('duty-time', d) } catch {} window.location.reload() }} className="flex-1 py-2 rounded-lg" style={{ background: '#1a2540', color: '#c0cfe0', fontWeight: 700, fontSize: '0.72rem', border: 'none', cursor: 'pointer' }}>{d[0].toUpperCase() + d.slice(1)}</button>
             ))}
           </div>
         </div>
@@ -1360,9 +1434,10 @@ function SystemSettingsPanel({ open, onClose, theme, setTheme, user }: {
 
 // ── More Options Bottom Sheet ─────────────────────────────────────────────────
 
-function MoreOptionsSheet({ open, onClose, onSettings, onSignOut }: {
+function MoreOptionsSheet({ open, onClose, onSettings, onSignOut, theme, setTheme }: {
   open: boolean; onClose: () => void
   onSettings: () => void; onSignOut: () => void
+  theme: Theme; setTheme: (t: Theme) => void
 }) {
   return (
     <>
@@ -1394,7 +1469,7 @@ function MoreOptionsSheet({ open, onClose, onSettings, onSignOut }: {
           <p style={{ fontWeight: 700, fontSize: '0.65rem', letterSpacing: '0.15em', color: '#4a5a72', marginBottom: '4px' }}>PREFERENCES & SYSTEM</p>
         </div>
         {[
-          { icon: <IconMoon size={20} color="#8899bb" />, label: 'Black Mode', action: onClose },
+          { icon: <IconMoon size={20} color="#8899bb" />, label: 'Black Mode', action: () => { setTheme('bw'); onClose() } },
           { icon: <IconSettings size={20} color="#8899bb" />, label: 'Settings', action: () => { onClose(); onSettings() } },
           { icon: <IconHelp size={20} color="#8899bb" />, label: 'Help Center', action: onClose },
         ].map(item => (
@@ -1482,10 +1557,19 @@ function AppShell({ onSignOut, user }: { onSignOut: () => void; user: StaffUser 
   const [tacticalOpen, setTacticalOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
-  const [theme, setTheme] = useState<Theme>('dark')
+  const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('app-theme') as Theme) ?? 'dark')
+  const [duty, setDuty] = useState<Duty>(() => (localStorage.getItem('duty-time') as Duty) ?? 'morning')
   const [toast, setToast] = useState({ show: true, message: `Welcome back, ${user.name}!` })
 
   useEffect(() => { followedFlightsRef.current = followedFlights }, [followedFlights])
+
+  useEffect(() => {
+    try { localStorage.setItem('app-theme', theme) } catch {}
+  }, [theme])
+
+  useEffect(() => {
+    try { localStorage.setItem('duty-time', duty) } catch {}
+  }, [duty])
 
   useEffect(() => {
     localStorage.setItem('followed-flight-ids', JSON.stringify([...followedFlights]))
@@ -1579,10 +1663,18 @@ function AppShell({ onSignOut, user }: { onSignOut: () => void; user: StaffUser 
     setActiveTab(tab)
   }
 
+  const palette = theme === 'light' ? {
+    bg: '#f8fafc', headerBg: '#ffffff', headerBorder: 'rgba(0,0,0,0.06)', iconBg: '#f1f5f9', text: '#0b1120', tabBg: '#ffffff'
+  } : theme === 'black' ? {
+    bg: '#000000', headerBg: '#000000', headerBorder: 'rgba(255,255,255,0.04)', iconBg: '#0b0b0b', text: '#ffffff', tabBg: '#0b0b0b'
+  } : {
+    bg: '#0b1120', headerBg: '#0b1120', headerBorder: 'rgba(255,255,255,0.06)', iconBg: '#131c2e', text: '#ffffff', tabBg: '#111827'
+  }
+
   return (
-    <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: '#0b1120', maxWidth: '480px', margin: '0 auto', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: palette.bg, color: palette.text, maxWidth: '480px', margin: '0 auto', position: 'relative', overflow: 'hidden', filter: theme === 'bw' ? 'grayscale(1) contrast(1.05)' : 'none' }}>
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3" style={{ background: '#0b1120', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
+      <div className="flex items-center justify-between px-4 py-3" style={{ background: palette.headerBg, borderBottom: `1px solid ${palette.headerBorder}`, flexShrink: 0 }}>
         <button onClick={() => setDrawerOpen(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px' }}>
           <HexLogo size={32} />
         </button>
@@ -1590,21 +1682,29 @@ function AppShell({ onSignOut, user }: { onSignOut: () => void; user: StaffUser 
           <button
             onClick={() => setTacticalOpen(true)}
             className="flex items-center justify-center rounded-xl"
-            style={{ width: 38, height: 38, background: '#131c2e', border: '1px solid rgba(255,255,255,0.08)', cursor: 'pointer' }}
+            style={{ width: 38, height: 38, background: palette.iconBg, border: `1px solid ${palette.headerBorder}`, cursor: 'pointer' }}
           >
             <IconSpark size={17} color="#8899bb" />
           </button>
           <button
             onClick={() => setTacticalOpen(true)}
             className="flex items-center justify-center rounded-xl"
-            style={{ width: 38, height: 38, background: '#131c2e', border: '1px solid rgba(255,255,255,0.08)', cursor: 'pointer' }}
+            style={{ width: 38, height: 38, background: palette.iconBg, border: `1px solid ${palette.headerBorder}`, cursor: 'pointer' }}
           >
             <IconBell size={17} color="#8899bb" />
           </button>
+            <button
+              onClick={() => setTheme(t => t === 'dark' ? 'light' : t === 'light' ? 'bw' : 'dark')}
+              title="Cycle theme: Dark → Light → B/W"
+              className="flex items-center justify-center rounded-xl"
+              style={{ width: 36, height: 36, background: palette.iconBg, border: `1px solid ${palette.headerBorder}`, cursor: 'pointer', marginLeft: 4 }}
+            >
+              <IconSpark size={14} color={theme === 'light' ? '#0b1120' : theme === 'bw' ? '#fff' : '#8899bb'} />
+            </button>
           <button
             onClick={() => setSettingsOpen(true)}
             className="flex items-center justify-center rounded-xl"
-            style={{ width: 38, height: 38, background: '#1a2540', border: '1px solid rgba(255,255,255,0.12)', cursor: 'pointer', fontWeight: 800, fontSize: '0.75rem', color: '#d0ddf0' }}
+            style={{ width: 38, height: 38, background: palette.iconBg, border: `1px solid ${palette.headerBorder}`, cursor: 'pointer', fontWeight: 800, fontSize: '0.75rem', color: palette.text }}
           >
             {user.name.split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase()}
           </button>
@@ -1613,8 +1713,8 @@ function AppShell({ onSignOut, user }: { onSignOut: () => void; user: StaffUser 
 
       {/* Content */}
       <div style={{ flex: 1, overflow: 'hidden' }}>
-        {activeTab === 'refueling' && <RefuelingScreen flights={flights} followedFlights={followedFlights} reminders={reminders} onFollow={handleFollow} onReminder={handleReminder} />}
-        {activeTab === 'followed' && <FollowedFlightsScreen flights={flights} followedFlights={followedFlights} reminders={reminders} onFollow={handleFollow} onReminder={handleReminder} />}
+        {activeTab === 'refueling' && <RefuelingScreen flights={flights} followedFlights={followedFlights} reminders={reminders} onFollow={handleFollow} onReminder={handleReminder} duty={duty} />}
+        {activeTab === 'followed' && <FollowedFlightsScreen flights={flights} followedFlights={followedFlights} reminders={reminders} onFollow={handleFollow} onReminder={handleReminder} duty={duty} />}
         {activeTab === 'density' && <DensityMeasureScreen />}
       </div>
 
@@ -1622,8 +1722,8 @@ function AppShell({ onSignOut, user }: { onSignOut: () => void; user: StaffUser 
       <div
         className="flex items-center justify-around px-2 py-2"
         style={{
-          background: '#111827',
-          border: '1px solid rgba(255,255,255,0.07)',
+          background: palette.tabBg,
+          border: `1px solid ${palette.headerBorder}`,
           borderRadius: '20px 20px 0 0',
           flexShrink: 0,
           paddingBottom: 'calc(8px + env(safe-area-inset-bottom, 0px))',
@@ -1651,7 +1751,7 @@ function AppShell({ onSignOut, user }: { onSignOut: () => void; user: StaffUser 
       <SideDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} activeTab={activeTab} onNav={setActiveTab} onSignOut={onSignOut} />
       <TacticalUpdatesPanel open={tacticalOpen} onClose={() => setTacticalOpen(false)} />
       <SystemSettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} theme={theme} setTheme={setTheme} user={user} />
-      <MoreOptionsSheet open={moreOpen} onClose={() => setMoreOpen(false)} onSettings={() => setSettingsOpen(true)} onSignOut={onSignOut} />
+      <MoreOptionsSheet open={moreOpen} onClose={() => setMoreOpen(false)} onSettings={() => setSettingsOpen(true)} onSignOut={onSignOut} theme={theme} setTheme={setTheme} />
       <Toast show={toast.show} message={toast.message} onDismiss={() => setToast(t => ({ ...t, show: false }))} />
     </div>
   )
@@ -1660,8 +1760,24 @@ function AppShell({ onSignOut, user }: { onSignOut: () => void; user: StaffUser 
 // ── Root ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>('login')
-  const [user, setUser] = useState<StaffUser | null>(null)
+  const [user, setUser] = useState<StaffUser | null>(() => {
+    try {
+      const raw = localStorage.getItem('auth-user')
+      return raw ? JSON.parse(raw) as StaffUser : null
+    } catch {
+      return null
+    }
+  })
+
+  useEffect(() => {
+    if (user) {
+      try { localStorage.setItem('auth-user', JSON.stringify(user)) } catch {}
+    } else {
+      try { localStorage.removeItem('auth-user') } catch {}
+    }
+  }, [user])
+
+  const [screen, setScreen] = useState<Screen>(() => (localStorage.getItem('auth-user') ? 'app' : 'login'))
 
   return screen === 'login'
     ? <LoginScreen onLogin={authenticatedUser => { setUser(authenticatedUser); setScreen('app') }} />

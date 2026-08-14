@@ -2,7 +2,7 @@ self.addEventListener('install', () => self.skipWaiting())
 self.addEventListener('activate', event => event.waitUntil(self.clients.claim()))
 self.addEventListener('push', event => {
   const data = event.data?.json?.() ?? { title: 'Fuel Services', body: 'A followed flight has an update.' }
-  event.waitUntil(self.registration.showNotification(data.title, { body: data.body, icon: '/favicon.ico', data: { url: data.url ?? '/' } }))
+  event.waitUntil(self.registration.showNotification(data.title, { body: data.body, icon: '/icon.svg', data: { url: data.url ?? '/' } }))
 })
 self.addEventListener('notificationclick', event => {
   event.notification.close()
