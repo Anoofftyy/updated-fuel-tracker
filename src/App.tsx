@@ -320,6 +320,34 @@ type FlightTab = 'INT' | 'DOM' | 'ADHOC'
 type FlightDirection = 'ARRIVAL' | 'DEPARTURE'
 type ReminderMinutes = 20 | 15 | 10 | 5 | 0
 type Theme = 'dark' | 'black' | 'light'
+type DutyTime = 'morning' | 'evening' | 'night'
+
+const THEME_COLORS: Record<Theme, { bg: string; surface: string; text: string; textMuted: string; border: string; sidebar: string }> = {
+  dark: {
+    bg: '#0b1120',
+    surface: '#131c2e',
+    text: '#fff',
+    textMuted: '#8899bb',
+    border: 'rgba(255,255,255,0.06)',
+    sidebar: '#111827',
+  },
+  light: {
+    bg: '#f5f7fa',
+    surface: '#ffffff',
+    text: '#0b1120',
+    textMuted: '#4a5a72',
+    border: 'rgba(0,0,0,0.08)',
+    sidebar: '#f0f3f7',
+  },
+  black: {
+    bg: '#000000',
+    surface: '#0a0a0a',
+    text: '#fff',
+    textMuted: '#a0a8b8',
+    border: 'rgba(255,255,255,0.04)',
+    sidebar: '#000000',
+  },
+}
 
 interface Flight {
   id: string
@@ -436,6 +464,31 @@ async function syncPushSubscription(flightIds: Set<string>, reminders: Record<st
   }
 }
 
+function filterFlightsByDutyTime(flights: Flight[], dutyTime: DutyTime): Flight[] {
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const tomorrow = new Date(today.getTime() + 86400000)
+
+  const parseTime = (timeStr: string): number => {
+    const match = timeStr.match(/^(\d{1,2}):(\d{2})$/)
+    if (!match) return -1
+    return Number(match[1]) * 60 + Number(match[2])
+  }
+
+  return flights.filter(flight => {
+    const etaMinutes = parseTime(flight.eta) || parseTime(flight.sta) || -1
+    const stdMinutes = parseTime(flight.std) || -1
+
+    if (dutyTime === 'morning') {
+      return (etaMinutes >= 7 * 60 && etaMinutes <= 16 * 60 + 30) || (stdMinutes >= 7 * 60 && stdMinutes <= 16 * 60 + 30)
+    } else if (dutyTime === 'evening') {
+      return (etaMinutes >= 15 * 60 && etaMinutes <= 23 * 60 + 30) || (stdMinutes >= 15 * 60 && stdMinutes <= 23 * 60 + 30)
+    } else {
+      return (etaMinutes >= 22 * 60 + 30 || etaMinutes <= 8 * 60 + 30) || (stdMinutes >= 22 * 60 + 30 || stdMinutes <= 8 * 60 + 30)
+    }
+  })
+}
+
 // ── Data ─────────────────────────────────────────────────────────────────────
 
 const FLIGHTS_INT: Flight[] = [
@@ -460,77 +513,86 @@ interface StaffUser {
   name: string
 }
 
-const STAFF_USERS: StaffUser[] = [
-  { rcNumber: 'A-10608', name: 'Moosa Aiman' },
-  { rcNumber: 'A-10609', name: 'Mohamed Shamikh Ahmed' },
-  { rcNumber: 'A-10721', name: 'Abdul Qadir' },
-  { rcNumber: 'A-10785', name: 'Hassan Sammah' },
-  { rcNumber: 'A-2708', name: 'Mohamed Ameez' },
-  { rcNumber: 'A-3036', name: 'Ahmed Jumail' },
-  { rcNumber: 'A-3046', name: 'Mohamed Ashhad' },
-  { rcNumber: 'A-3047', name: 'Ali Ibrahim' },
-  { rcNumber: 'A-3162', name: 'Sam aan Moosa' },
-  { rcNumber: 'A-3166', name: 'Tholal Mohamed' },
-  { rcNumber: 'A-3287', name: 'Nafiu Jameel' },
-  { rcNumber: 'A-3292', name: 'Ali Shihaan' },
-  { rcNumber: 'A-3639', name: 'Hussain Asir' },
-  { rcNumber: 'A-3968', name: 'Moosa Reehan' },
-  { rcNumber: 'A-4707', name: 'Mohamed Naveez' },
-  { rcNumber: 'A-4716', name: 'Mohamed Munawwaru' },
-  { rcNumber: 'A-4718', name: 'Mohamed Naseem' },
-  { rcNumber: 'A-5055', name: 'Ahmed Aslam' },
-  { rcNumber: 'A-5384', name: 'Jazleen Jaufar' },
-  { rcNumber: 'A-5438', name: 'Ahmed Ashfaq' },
-  { rcNumber: 'A-5582', name: 'Abdulla Mushfiq' },
-  { rcNumber: 'A-5811', name: 'Mohamed Maadhih' },
-  { rcNumber: 'A-5989', name: 'Ahmed Jinaan' },
-  { rcNumber: 'A-6102', name: 'Hussain Shinaan' },
-  { rcNumber: 'A-6155', name: 'Afsah Abdulla Adam' },
-  { rcNumber: 'A-6252', name: 'Hassan Shahum' },
-  { rcNumber: 'A-6422', name: 'Hassan Naajee' },
-  { rcNumber: 'A-6600', name: 'Ibrahim Hamdhan' },
-  { rcNumber: 'A-6606', name: 'Ahmed Azhan' },
-  { rcNumber: 'A-6780', name: 'Hassan Abdulla' },
-  { rcNumber: 'A-7000', name: 'Ahmed Alaf' },
-  { rcNumber: 'A-7265', name: 'Rajwan Ibrahim' },
-  { rcNumber: 'A-7271', name: 'Anoof Shareef' },
-  { rcNumber: 'A-7282', name: 'Ahusan Abdulla' },
-  { rcNumber: 'A-7302', name: 'Saif Mohamed' },
-  { rcNumber: 'A-7323', name: 'Abdul Qadir Ibrahim' },
-  { rcNumber: 'A-7449', name: 'Ismail Zabeeh' },
-  { rcNumber: 'A-7483', name: 'Mauman Aslam' },
-  { rcNumber: 'A-7523', name: 'Ahmed Naushad' },
-  { rcNumber: 'A-7708', name: 'Mohamed Risaal Rasheed' },
-  { rcNumber: 'A-7881', name: 'Ahmed Humaam' },
-  { rcNumber: 'A-8026', name: 'Mohamed Jumaan' },
-  { rcNumber: 'A-8027', name: 'Ali Razzan Hassan Rasheed' },
-  { rcNumber: 'A-8276', name: 'Hassan Ashfag Mohamed' },
-  { rcNumber: 'A-8288', name: 'Mohamed Shaikhan Shiham' },
-  { rcNumber: 'A-8369', name: 'Ahmed Ibrahim' },
-  { rcNumber: 'A-8581', name: 'Ali Muneef' },
-  { rcNumber: 'A-8724', name: 'Ali Aleef' },
-  { rcNumber: 'A-9043', name: 'Nishan Shakir' },
-  { rcNumber: 'A-9117', name: 'Ahmed Tholaal' },
-  { rcNumber: 'A-9168', name: 'Ali Sinaan' },
-  { rcNumber: 'A-10985', name: 'Ibrahim Sabooh Salah' },
-  { rcNumber: 'A-10984', name: "Iz'aan Shaukath" },
+interface StaffUserWithPassword extends StaffUser {
+  password: string
+}
+
+const STAFF_USERS: StaffUserWithPassword[] = [
+  { rcNumber: 'A-10608', name: 'Moosa Aiman', password: 'Welcome123' },
+  { rcNumber: 'A-10609', name: 'Mohamed Shamikh Ahmed', password: 'Welcome123' },
+  { rcNumber: 'A-10721', name: 'Abdul Qadir', password: 'Welcome123' },
+  { rcNumber: 'A-10785', name: 'Hassan Sammah', password: 'Welcome123' },
+  { rcNumber: 'A-2708', name: 'Mohamed Ameez', password: 'Welcome123' },
+  { rcNumber: 'A-3036', name: 'Ahmed Jumail', password: 'Welcome123' },
+  { rcNumber: 'A-3046', name: 'Mohamed Ashhad', password: 'Welcome123' },
+  { rcNumber: 'A-3047', name: 'Ali Ibrahim', password: 'Welcome123' },
+  { rcNumber: 'A-3162', name: 'Sam aan Moosa', password: 'Welcome123' },
+  { rcNumber: 'A-3166', name: 'Tholal Mohamed', password: 'Welcome123' },
+  { rcNumber: 'A-3287', name: 'Nafiu Jameel', password: 'Welcome123' },
+  { rcNumber: 'A-3292', name: 'Ali Shihaan', password: 'Welcome123' },
+  { rcNumber: 'A-3639', name: 'Hussain Asir', password: 'Welcome123' },
+  { rcNumber: 'A-3968', name: 'Moosa Reehan', password: 'Welcome123' },
+  { rcNumber: 'A-4707', name: 'Mohamed Naveez', password: 'Welcome123' },
+  { rcNumber: 'A-4716', name: 'Mohamed Munawwaru', password: 'Welcome123' },
+  { rcNumber: 'A-4718', name: 'Mohamed Naseem', password: 'Welcome123' },
+  { rcNumber: 'A-5055', name: 'Ahmed Aslam', password: 'Welcome123' },
+  { rcNumber: 'A-5384', name: 'Jazleen Jaufar', password: 'Welcome123' },
+  { rcNumber: 'A-5438', name: 'Ahmed Ashfaq', password: 'Welcome123' },
+  { rcNumber: 'A-5582', name: 'Abdulla Mushfiq', password: 'Welcome123' },
+  { rcNumber: 'A-5811', name: 'Mohamed Maadhih', password: 'Welcome123' },
+  { rcNumber: 'A-5989', name: 'Ahmed Jinaan', password: 'Welcome123' },
+  { rcNumber: 'A-6102', name: 'Hussain Shinaan', password: 'Welcome123' },
+  { rcNumber: 'A-6155', name: 'Afsah Abdulla Adam', password: 'Welcome123' },
+  { rcNumber: 'A-6252', name: 'Hassan Shahum', password: 'Welcome123' },
+  { rcNumber: 'A-6422', name: 'Hassan Naajee', password: 'Welcome123' },
+  { rcNumber: 'A-6600', name: 'Ibrahim Hamdhan', password: 'Welcome123' },
+  { rcNumber: 'A-6606', name: 'Ahmed Azhan', password: 'Welcome123' },
+  { rcNumber: 'A-6780', name: 'Hassan Abdulla', password: 'Welcome123' },
+  { rcNumber: 'A-7000', name: 'Ahmed Alaf', password: 'Welcome123' },
+  { rcNumber: 'A-7265', name: 'Rajwan Ibrahim', password: 'Welcome123' },
+  { rcNumber: 'A-7271', name: 'Anoof Shareef', password: 'Welcome123' },
+  { rcNumber: 'A-7282', name: 'Ahusan Abdulla', password: 'Welcome123' },
+  { rcNumber: 'A-7302', name: 'Saif Mohamed', password: 'Welcome123' },
+  { rcNumber: 'A-7323', name: 'Abdul Qadir Ibrahim', password: 'Welcome123' },
+  { rcNumber: 'A-7449', name: 'Ismail Zabeeh', password: 'Welcome123' },
+  { rcNumber: 'A-7483', name: 'Mauman Aslam', password: 'Welcome123' },
+  { rcNumber: 'A-7523', name: 'Ahmed Naushad', password: 'Welcome123' },
+  { rcNumber: 'A-7708', name: 'Mohamed Risaal Rasheed', password: 'Welcome123' },
+  { rcNumber: 'A-7881', name: 'Ahmed Humaam', password: 'Welcome123' },
+  { rcNumber: 'A-8026', name: 'Mohamed Jumaan', password: 'Welcome123' },
+  { rcNumber: 'A-8027', name: 'Ali Razzan Hassan Rasheed', password: 'Welcome123' },
+  { rcNumber: 'A-8276', name: 'Hassan Ashfag Mohamed', password: 'Welcome123' },
+  { rcNumber: 'A-8288', name: 'Mohamed Shaikhan Shiham', password: 'Welcome123' },
+  { rcNumber: 'A-8369', name: 'Ahmed Ibrahim', password: 'Welcome123' },
+  { rcNumber: 'A-8581', name: 'Ali Muneef', password: 'Welcome123' },
+  { rcNumber: 'A-8724', name: 'Ali Aleef', password: 'Welcome123' },
+  { rcNumber: 'A-9043', name: 'Nishan Shakir', password: 'Welcome123' },
+  { rcNumber: 'A-9117', name: 'Ahmed Tholaal', password: 'Welcome123' },
+  { rcNumber: 'A-9168', name: 'Ali Sinaan', password: 'Welcome123' },
+  { rcNumber: 'A-10017', name: 'Ahunaf Shareef', password: 'Welcome123' },
+  { rcNumber: 'A-10985', name: 'Ibrahim Sabooh Salah', password: 'Welcome123' },
+  { rcNumber: 'A-10984', name: "Iz'aan Shaukath", password: 'Welcome123' },
 ]
 
 // ── Login Screen ─────────────────────────────────────────────────────────────
 
 function LoginScreen({ onLogin }: { onLogin: (user: StaffUser) => void }) {
-  const [credential, setCredential] = useState('')
+  const [rcNumber, setRcNumber] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [dutyTime, setDutyTime] = useState<'morning' | 'evening' | 'night'>('morning')
 
   const submitLogin = () => {
-    const normalizedCredential = credential.trim().toUpperCase()
-    const user = STAFF_USERS.find(staffUser => staffUser.rcNumber === normalizedCredential)
+    const normalizedRc = rcNumber.trim().toUpperCase()
+    const user = STAFF_USERS.find(u => u.rcNumber === normalizedRc && u.password === password)
     if (!user) {
-      setError('Enter a valid RC number from your staff account.')
+      setError('Invalid RC number or password.')
       return
     }
     setError('')
-    onLogin(user)
+    localStorage.setItem('selected-duty-time', dutyTime)
+    onLogin({ rcNumber: user.rcNumber, name: user.name })
   }
 
   return (
@@ -552,8 +614,9 @@ function LoginScreen({ onLogin }: { onLogin: (user: StaffUser) => void }) {
           </p>
         </div>
 
-        {/* Input */}
+        {/* RC Number Input */}
         <div className="mb-4">
+          <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 700, color: '#8899bb', letterSpacing: '0.1em', marginBottom: '8px' }}>RC NUMBER</label>
           <div
             className="flex items-center px-4 py-3.5 rounded-xl"
             style={{ background: '#1a2540', border: '1px solid rgba(255,255,255,0.08)' }}
@@ -561,16 +624,70 @@ function LoginScreen({ onLogin }: { onLogin: (user: StaffUser) => void }) {
             <input
               type="text"
               placeholder="Enter RC number"
-              value={credential}
-              onChange={e => setCredential(e.target.value)}
+              value={rcNumber}
+              onChange={e => setRcNumber(e.target.value)}
               style={{
                 background: 'transparent', border: 'none', outline: 'none',
                 color: '#fff', fontSize: '0.9rem', width: '100%',
               }}
-              onKeyDown={e => e.key === 'Enter' && submitLogin()}
             />
           </div>
+        </div>
+
+        {/* Password Input */}
+        <div className="mb-4">
+          <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 700, color: '#8899bb', letterSpacing: '0.1em', marginBottom: '8px' }}>PASSWORD</label>
+          <div
+            className="flex items-center px-4 py-3.5 rounded-xl"
+            style={{ background: '#1a2540', border: '1px solid rgba(255,255,255,0.08)' }}
+          >
+            <input
+              type={showPassword ? 'text' : 'password'}
+              placeholder="Enter password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && submitLogin()}
+              style={{
+                background: 'transparent', border: 'none', outline: 'none',
+                color: '#fff', fontSize: '0.9rem', width: '100%',
+              }}
+            />
+            <button
+              onClick={() => setShowPassword(!showPassword)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}
+            >
+              {showPassword ? '👁' : '👁‍🗨'}
+            </button>
+          </div>
           {error && <p style={{ color: '#ef4444', fontSize: '0.72rem', marginTop: '8px' }}>{error}</p>}
+        </div>
+
+        {/* Duty Time Selection */}
+        <div className="mb-6">
+          <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 700, color: '#8899bb', letterSpacing: '0.1em', marginBottom: '8px' }}>DUTY TIME</label>
+          <div className="flex rounded-xl p-1" style={{ background: '#1a2540' }}>
+            {(['morning', 'evening', 'night'] as const).map(time => (
+              <button
+                key={time}
+                onClick={() => setDutyTime(time)}
+                className="flex-1 py-2.5 rounded-lg"
+                style={{
+                  background: dutyTime === time ? '#2a3a52' : 'transparent',
+                  border: dutyTime === time ? '1px solid rgba(255,255,255,0.12)' : '1px solid transparent',
+                  color: dutyTime === time ? '#fff' : '#4a5a72',
+                  fontWeight: 700, fontSize: '0.72rem', letterSpacing: '0.08em',
+                  cursor: 'pointer',
+                }}
+              >
+                {time.toUpperCase()}
+              </button>
+            ))}
+          </div>
+          <p style={{ fontSize: '0.7rem', color: '#4a5a72', marginTop: '8px' }}>
+            {dutyTime === 'morning' && 'Morning: 07:00 - 16:30'}
+            {dutyTime === 'evening' && 'Evening: 15:00 - 23:30'}
+            {dutyTime === 'night' && 'Night: 22:30 - 08:30 (next day)'}
+          </p>
         </div>
 
         {/* Primary button */}
@@ -671,52 +788,53 @@ function DashboardScreen() {
 
 // ── Flight Card ───────────────────────────────────────────────────────────────
 
-function FlightCard({ flight, followed, reminder, onFollow, onReminder }: { flight: Flight; followed: boolean; reminder?: ReminderMinutes; onFollow: () => void; onReminder?: (minutes: ReminderMinutes) => void }) {
+function FlightCard({ flight, followed, reminder, onFollow, onReminder, theme = 'dark' }: { flight: Flight; followed: boolean; reminder?: ReminderMinutes; onFollow: () => void; onReminder?: (minutes: ReminderMinutes) => void; theme?: Theme }) {
+  const colors = THEME_COLORS[theme]
   return (
-    <div className="rounded-2xl mb-3 overflow-hidden" style={{ background: '#131c2e', border: '1px solid rgba(255,255,255,0.07)' }}>
+    <div className="rounded-2xl mb-3 overflow-hidden" style={{ background: colors.surface, border: `1px solid ${colors.border}` }}>
       <div className="p-4 pb-3">
         <div className="flex items-start justify-between mb-1">
           <div className="flex items-center gap-3">
-            <span style={{ fontWeight: 800, fontSize: '1.3rem', color: '#fff', letterSpacing: '-0.02em' }}>{flight.flightNo}</span>
-            <span style={{ fontSize: '0.7rem', fontWeight: 600, letterSpacing: '0.08em', color: '#8899bb' }}>{flight.airline}</span>
+            <span style={{ fontWeight: 800, fontSize: '1.3rem', color: colors.text, letterSpacing: '-0.02em' }}>{flight.flightNo}</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 600, letterSpacing: '0.08em', color: colors.textMuted }}>{flight.airline}</span>
           </div>
           <button
             aria-label={followed ? `Stop following ${flight.flightNo}` : `Follow ${flight.flightNo}`}
             onClick={onFollow}
             className="flex items-center justify-center rounded-lg"
-            style={{ width: 34, height: 34, background: followed ? 'rgba(59,158,221,0.14)' : '#1a2540', border: '1px solid rgba(255,255,255,0.08)', cursor: 'pointer' }}
+            style={{ width: 34, height: 34, background: followed ? 'rgba(59,158,221,0.14)' : colors.surface, border: `1px solid ${colors.border}`, cursor: 'pointer' }}
           >
-            <IconBell size={16} color={followed ? '#3b9edd' : '#8899bb'} />
+            <IconBell size={16} color={followed ? '#3b9edd' : colors.textMuted} />
           </button>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center gap-1">
-            <IconPin size={12} color="#4a5a72" />
-            <span style={{ fontSize: '0.7rem', color: '#4a5a72' }}>---</span>
+            <IconPin size={12} color={colors.textMuted} />
+            <span style={{ fontSize: '0.7rem', color: colors.textMuted }}>---</span>
           </div>
-          <span style={{ fontSize: '0.7rem', color: '#4a5a72' }}>|</span>
-          <span style={{ fontWeight: 600, fontSize: '0.75rem', color: '#8899bb' }}>{flight.aircraftType}</span>
-          <span style={{ fontSize: '0.7rem', color: '#4a5a72' }}>|</span>
+          <span style={{ fontSize: '0.7rem', color: colors.textMuted }}>|</span>
+          <span style={{ fontWeight: 600, fontSize: '0.75rem', color: colors.textMuted }}>{flight.aircraftType}</span>
+          <span style={{ fontSize: '0.7rem', color: colors.textMuted }}>|</span>
           <span
             className="px-2 py-0.5 rounded-md"
             style={{ background: 'rgba(59,158,221,0.1)', color: '#3b9edd', fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.06em', border: '1px solid rgba(59,158,221,0.25)' }}
           >
             {flight.registration}
           </span>
-          <span style={{ fontSize: '0.7rem', color: '#4a5a72' }}>|</span>
-          <span style={{ fontWeight: 600, fontSize: '0.75rem', color: '#8899bb' }}>{flight.route}</span>
+          <span style={{ fontSize: '0.7rem', color: colors.textMuted }}>|</span>
+          <span style={{ fontWeight: 600, fontSize: '0.75rem', color: colors.textMuted }}>{flight.route}</span>
         </div>
       </div>
-      <div style={{ height: '1px', background: 'rgba(255,255,255,0.05)' }} />
-      <div className="grid grid-cols-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+      <div style={{ height: '1px', background: colors.border }} />
+      <div className="grid grid-cols-3" style={{ borderBottom: `1px solid ${colors.border}` }}>
         {[
           { label: 'STA', value: flight.sta },
           { label: 'ETA', value: flight.eta },
           { label: 'STD', value: flight.std, highlight: flight.std !== '--:--' },
         ].map((t, i) => (
-          <div key={t.label} className="flex flex-col items-center py-3" style={{ borderRight: i < 2 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
-            <span style={{ fontSize: '0.6rem', fontWeight: 600, letterSpacing: '0.12em', color: '#4a5a72' }}>{t.label}</span>
-            <span style={{ fontWeight: 700, fontSize: '1rem', color: t.highlight ? '#f59e0b' : '#8899bb', marginTop: '2px' }}>{t.value}</span>
+          <div key={t.label} className="flex flex-col items-center py-3" style={{ borderRight: i < 2 ? `1px solid ${colors.border}` : 'none' }}>
+            <span style={{ fontSize: '0.6rem', fontWeight: 600, letterSpacing: '0.12em', color: colors.textMuted }}>{t.label}</span>
+            <span style={{ fontWeight: 700, fontSize: '1rem', color: t.highlight ? '#f59e0b' : colors.textMuted, marginTop: '2px' }}>{t.value}</span>
           </div>
         ))}
       </div>
@@ -729,7 +847,7 @@ function FlightCard({ flight, followed, reminder, onFollow, onReminder }: { flig
               value={reminder ?? 0}
               onChange={event => onReminder(Number(event.target.value) as ReminderMinutes)}
               className="px-2 py-1.5 rounded-lg"
-              style={{ background: '#1a2540', color: '#8899bb', border: '1px solid rgba(255,255,255,0.08)', fontSize: '0.65rem', outline: 'none' }}
+              style={{ background: colors.surface, color: colors.textMuted, border: `1px solid ${colors.border}`, fontSize: '0.65rem', outline: 'none' }}
             >
               <option value={20}>20 min</option>
               <option value={15}>15 min</option>
@@ -754,50 +872,63 @@ function FlightCard({ flight, followed, reminder, onFollow, onReminder }: { flig
 
 // ── Flight Refueling Screen ───────────────────────────────────────────────────
 
-function RefuelingScreen({ flights, followedFlights, reminders, onFollow, onReminder }: { flights: Flight[]; followedFlights: Set<string>; reminders: Record<string, ReminderMinutes>; onFollow: (flight: Flight) => void; onReminder: (flightId: string, minutes: ReminderMinutes) => void }) {
+function RefuelingScreen({ flights, followedFlights, reminders, onFollow, onReminder, dutyTime, theme, hideLanded, hideDeparted }: { flights: Flight[]; followedFlights: Set<string>; reminders: Record<string, ReminderMinutes>; onFollow: (flight: Flight) => void; onReminder: (flightId: string, minutes: ReminderMinutes) => void; dutyTime: DutyTime; theme: Theme; hideLanded?: boolean; hideDeparted?: boolean }) {
   const [flightTab, setFlightTab] = useState<FlightTab>('INT')
-  const [direction, setDirection] = useState<'ALL' | FlightDirection>('ALL')
+  const colors = THEME_COLORS[theme]
 
-  const visibleFlights = flights.filter(flight =>
-    (flight.flightType || (flight.flightNo.startsWith('PVT') ? 'ADHOC' : flight.id.startsWith('d') ? 'DOM' : 'INT')) === flightTab &&
-    (direction === 'ALL' || (flight.direction ?? 'DEPARTURE') === direction)
-  )
-  const sectionLabel = flightTab === 'INT' ? 'INTERNATIONAL OPERATIONS' : flightTab === 'DOM' ? 'DOMESTIC OPERATIONS' : 'ADHOC OPERATIONS'
+  const filteredByTab = flights.filter(f => {
+    const inferredType = f.flightType ?? (f.id.startsWith('d') ? 'DOM' : f.id.startsWith('a') ? 'ADHOC' : 'INT')
+    return inferredType === flightTab
+  })
+  const filteredByDuty = filterFlightsByDutyTime(filteredByTab, dutyTime)
+  const visibleFlights = filteredByDuty.filter(f => {
+    if (hideLanded && f.status === 'COMPLETED') return false
+    if (hideDeparted && f.status === 'DEPARTED') return false
+    return true
+  })
+
+  const tabs: { tab: FlightTab; label: string }[] = [
+    { tab: 'INT', label: 'INTERNATIONAL' },
+    { tab: 'DOM', label: 'DOMESTIC' },
+    { tab: 'ADHOC', label: 'AD-HOC' },
+  ]
+
+  const sectionLabel = flightTab === 'INT' ? 'International Flights' : flightTab === 'DOM' ? 'Domestic Flights' : 'Ad-Hoc Charters'
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Flight type tabs */}
-      <div className="flex items-center gap-1 px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-        <div className="flex rounded-xl p-1 gap-1 flex-1" style={{ background: '#1a2540' }}>
-          {(['INT', 'DOM', 'ADHOC'] as FlightTab[]).map(t => (
+    <div className="flex flex-col h-full" style={{ background: colors.bg }}>
+      {/* Tab selector */}
+      <div
+        className="flex items-center px-4 pt-4"
+        style={{
+          borderBottom: `1px solid ${colors.border}`,
+          paddingBottom: '12px',
+          overflowX: 'auto',
+        }}
+      >
+        {tabs.map(t => {
+          const active = flightTab === t.tab
+          return (
             <button
-              key={t}
-              onClick={() => setFlightTab(t)}
-              className="flex-1 py-2 rounded-lg"
+              key={t.tab}
+              onClick={() => setFlightTab(t.tab)}
+              className="px-4 py-2 whitespace-nowrap"
               style={{
-                background: flightTab === t ? 'linear-gradient(135deg,#2980c4,#3b9edd)' : 'transparent',
-                color: flightTab === t ? '#fff' : '#4a5a72',
-                fontWeight: 700, fontSize: '0.72rem', letterSpacing: '0.1em',
-                border: 'none', cursor: 'pointer', transition: 'all 0.2s',
+                background: active ? `rgba(59,158,221,0.1)` : 'transparent',
+                border: active ? '1px solid rgba(59,158,221,0.3)' : '1px solid transparent',
+                borderRadius: '10px',
+                fontWeight: 700,
+                fontSize: '0.7rem',
+                letterSpacing: '0.08em',
+                color: active ? '#3b9edd' : colors.textMuted,
+                cursor: 'pointer',
+                marginRight: '8px',
               }}
             >
-              {t}
+              {t.label}
             </button>
-          ))}
-        </div>
-        <button
-          className="flex items-center justify-center rounded-xl ml-2"
-          style={{ width: 40, height: 40, background: '#1a2540', border: '1px solid rgba(255,255,255,0.08)', cursor: 'pointer', flexShrink: 0 }}
-        >
-          <IconUser size={16} color="#8899bb" />
-        </button>
-      </div>
-      <div className="flex items-center gap-2 px-4 py-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-        {(['ALL', 'ARRIVAL', 'DEPARTURE'] as const).map(option => (
-          <button key={option} onClick={() => setDirection(option)} className="flex-1 py-2 rounded-lg" style={{ background: direction === option ? 'rgba(59,158,221,0.16)' : '#1a2540', color: direction === option ? '#5bb8f5' : '#8899bb', border: '1px solid rgba(255,255,255,0.08)', fontSize: '0.65rem', fontWeight: 700, cursor: 'pointer' }}>
-            {option === 'ALL' ? 'ALL' : option === 'ARRIVAL' ? 'ARRIVALS' : 'DEPARTURES'}
-          </button>
-        ))}
+          )
+        })}
       </div>
 
       {/* Flights list */}
@@ -806,40 +937,41 @@ function RefuelingScreen({ flights, followedFlights, reminders, onFollow, onRemi
           <span style={{ fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.15em', color: '#3b9edd' }}>{sectionLabel}</span>
           <span
             className="px-3 py-1 rounded-full"
-            style={{ background: '#1a2540', border: '1px solid rgba(255,255,255,0.1)', fontSize: '0.7rem', fontWeight: 700, color: '#d0ddf0' }}
+            style={{ background: colors.surface, border: `1px solid ${colors.border}`, fontSize: '0.7rem', fontWeight: 700, color: colors.textMuted }}
           >
             {visibleFlights.length} Flights
           </span>
         </div>
-        {visibleFlights.length === 0 && <div className="rounded-xl p-5 text-center" style={{ background: '#131c2e', color: '#8899bb' }}>No flights available in this category.</div>}
-        {visibleFlights.map(f => <FlightCard key={f.id} flight={f} followed={followedFlights.has(f.id)} reminder={reminders[f.id]} onFollow={() => onFollow(f)} onReminder={minutes => onReminder(f.id, minutes)} />)}
+        {visibleFlights.length === 0 && <div className="rounded-xl p-5 text-center" style={{ background: colors.surface, color: colors.textMuted }}>No flights available in this category.</div>}
+        {visibleFlights.map(f => <FlightCard key={f.id} flight={f} followed={followedFlights.has(f.id)} reminder={reminders[f.id]} onFollow={() => onFollow(f)} onReminder={minutes => onReminder(f.id, minutes)} theme={theme} />)}
       </div>
     </div>
   )
 }
 
-function FollowedFlightsScreen({ flights, followedFlights, reminders, onFollow, onReminder }: { flights: Flight[]; followedFlights: Set<string>; reminders: Record<string, ReminderMinutes>; onFollow: (flight: Flight) => void; onReminder: (flightId: string, minutes: ReminderMinutes) => void }) {
+function FollowedFlightsScreen({ flights, followedFlights, reminders, onFollow, onReminder, theme = 'dark' }: { flights: Flight[]; followedFlights: Set<string>; reminders: Record<string, ReminderMinutes>; onFollow: (flight: Flight) => void; onReminder: (flightId: string, minutes: ReminderMinutes) => void; theme?: Theme }) {
+  const colors = THEME_COLORS[theme]
   const followed = flights.filter(flight => followedFlights.has(flight.id))
 
   return (
-    <div className="p-4 overflow-y-auto" style={{ height: '100%' }}>
+    <div className="p-4 overflow-y-auto" style={{ height: '100%', background: colors.bg }}>
       <div className="flex items-end justify-between mb-5">
         <div>
-          <p style={{ color: '#4a5a72', fontSize: '0.7rem', fontWeight: 600, letterSpacing: '0.15em' }}>PERSONAL WATCHLIST</p>
-          <h2 style={{ color: '#fff', fontWeight: 800, fontSize: '1.3rem', marginTop: '2px' }}>Followed Flights</h2>
+          <p style={{ color: colors.textMuted, fontSize: '0.7rem', fontWeight: 600, letterSpacing: '0.15em' }}>PERSONAL WATCHLIST</p>
+          <h2 style={{ color: colors.text, fontWeight: 800, fontSize: '1.3rem', marginTop: '2px' }}>Followed Flights</h2>
         </div>
-        <span className="px-3 py-1 rounded-full" style={{ background: '#1a2540', border: '1px solid rgba(255,255,255,0.1)', fontSize: '0.7rem', fontWeight: 700, color: '#d0ddf0' }}>
+        <span className="px-3 py-1 rounded-full" style={{ background: colors.surface, border: `1px solid ${colors.border}`, fontSize: '0.7rem', fontWeight: 700, color: colors.textMuted }}>
           {followed.length}
         </span>
       </div>
       {followed.length === 0 ? (
-        <div className="rounded-2xl p-6 text-center" style={{ background: '#131c2e', border: '1px solid rgba(255,255,255,0.07)' }}>
-          <IconBell size={30} color="#4a5a72" />
-          <p style={{ color: '#fff', fontWeight: 700, marginTop: '12px' }}>No followed flights</p>
-          <p style={{ color: '#8899bb', fontSize: '0.78rem', marginTop: '6px', lineHeight: 1.5 }}>Tap the bell on any flight to add it to your watchlist.</p>
+        <div className="rounded-2xl p-6 text-center" style={{ background: colors.surface, border: `1px solid ${colors.border}` }}>
+          <IconBell size={30} color={colors.textMuted} />
+          <p style={{ color: colors.text, fontWeight: 700, marginTop: '12px' }}>No followed flights</p>
+          <p style={{ color: colors.textMuted, fontSize: '0.78rem', marginTop: '6px', lineHeight: 1.5 }}>Tap the bell on any flight to add it to your watchlist.</p>
         </div>
       ) : (
-        followed.map(flight => <FlightCard key={flight.id} flight={flight} followed reminder={reminders[flight.id]} onFollow={() => onFollow(flight)} onReminder={minutes => onReminder(flight.id, minutes)} />)
+        followed.map(flight => <FlightCard key={flight.id} flight={flight} followed reminder={reminders[flight.id]} onFollow={() => onFollow(flight)} onReminder={minutes => onReminder(flight.id, minutes)} theme={theme} />)
       )}
     </div>
   )
@@ -1061,13 +1193,15 @@ function LogHistoryScreen() {
 
 // ── Side Drawer ───────────────────────────────────────────────────────────────
 
-function SideDrawer({ open, onClose, activeTab, onNav, onSignOut }: {
+function SideDrawer({ open, onClose, activeTab, onNav, onSignOut, theme = 'dark' }: {
   open: boolean
   onClose: () => void
   activeTab: Tab
   onNav: (t: Tab) => void
   onSignOut: () => void
+  theme?: Theme
 }) {
+  const colors = THEME_COLORS[theme]
   const navItems: { label: string; tab: Tab; Icon: React.FC<{ active?: boolean }> }[] = [
     { label: 'Flights', tab: 'refueling', Icon: IconPlane },
     { label: 'Followed Flights', tab: 'followed', Icon: IconFollowed },
@@ -1090,8 +1224,8 @@ function SideDrawer({ open, onClose, activeTab, onNav, onSignOut }: {
         style={{
           position: 'fixed', top: 0, left: 0, bottom: 0,
           width: '72%', maxWidth: '300px',
-          background: '#111827',
-          borderRight: '1px solid rgba(255,255,255,0.06)',
+          background: colors.sidebar,
+          borderRight: `1px solid ${colors.border}`,
           zIndex: 50,
           transform: open ? 'translateX(0)' : 'translateX(-100%)',
           transition: 'transform 0.3s cubic-bezier(0.4,0,0.2,1)',
@@ -1099,7 +1233,7 @@ function SideDrawer({ open, onClose, activeTab, onNav, onSignOut }: {
         }}
       >
         {/* Logo header */}
-        <div className="flex items-center gap-3 px-5 py-5" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+        <div className="flex items-center gap-3 px-5 py-5" style={{ borderBottom: `1px solid ${colors.border}` }}>
           <HexLogo size={36} />
           <span style={{ fontWeight: 900, fontSize: '1.6rem', fontStyle: 'italic', color: '#3b9edd', letterSpacing: '-0.03em' }}>FMS</span>
         </div>
@@ -1120,7 +1254,7 @@ function SideDrawer({ open, onClose, activeTab, onNav, onSignOut }: {
                 }}
               >
                 <item.Icon active={active} />
-                <span style={{ fontWeight: 600, fontSize: '0.9rem', color: active ? '#3b9edd' : '#c0cfe0' }}>{item.label}</span>
+                <span style={{ fontWeight: 600, fontSize: '0.9rem', color: active ? '#3b9edd' : colors.textMuted }}>{item.label}</span>
                 {active && <div style={{ marginLeft: 'auto', width: 6, height: 6, borderRadius: '50%', background: '#3b9edd' }} />}
               </button>
             )
@@ -1128,15 +1262,15 @@ function SideDrawer({ open, onClose, activeTab, onNav, onSignOut }: {
         </div>
 
         {/* Bottom section */}
-        <div className="px-3 pb-6" style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '12px' }}>
-          <button className="flex items-center gap-3 w-full px-3 py-3 rounded-xl mb-1" style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-            <IconHelp color="#4a5a72" />
-            <span style={{ fontWeight: 600, fontSize: '0.9rem', color: '#8899bb' }}>Help Center</span>
-          </button>
-          <button className="flex items-center gap-3 w-full px-3 py-3 rounded-xl mb-1" style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-            <IconSettings color="#4a5a72" />
-            <span style={{ fontWeight: 600, fontSize: '0.9rem', color: '#8899bb' }}>System Settings</span>
-          </button>
+        <div className="px-3 pb-6" style={{ borderTop: `1px solid ${colors.border}`, paddingTop: '12px' }}>
+          <a href="https://macl-itp.netlify.app/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 w-full px-3 py-3 rounded-xl mb-1" style={{ background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'none', color: 'inherit' }}>
+            <IconHelp color={colors.textMuted} />
+            <span style={{ fontWeight: 600, fontSize: '0.9rem', color: colors.textMuted }}>ITP</span>
+          </a>
+          <a href="https://itp-logentry.netlify.app/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 w-full px-3 py-3 rounded-xl mb-1" style={{ background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'none', color: 'inherit' }}>
+            <IconSettings color={colors.textMuted} />
+            <span style={{ fontWeight: 600, fontSize: '0.9rem', color: colors.textMuted }}>LOG ENTRY</span>
+          </a>
           <button
             onClick={() => { onClose(); onSignOut() }}
             className="flex items-center gap-3 w-full px-3 py-3 rounded-xl"
@@ -1154,6 +1288,13 @@ function SideDrawer({ open, onClose, activeTab, onNav, onSignOut }: {
 // ── Tactical Updates Panel ────────────────────────────────────────────────────
 
 function TacticalUpdatesPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [dismissed, setDismissed] = useState(() => localStorage.getItem('tactical-update-dismissed') === 'true')
+
+  const dismissUpdate = () => {
+    setDismissed(true)
+    localStorage.setItem('tactical-update-dismissed', 'true')
+  }
+
   return (
     <>
       <div
@@ -1186,12 +1327,19 @@ function TacticalUpdatesPanel({ open, onClose }: { open: boolean; onClose: () =>
             <IconX size={18} color="#4a5a72" />
           </button>
         </div>
-        <div className="flex flex-col items-center justify-center py-8 rounded-xl" style={{ background: '#1a2540' }}>
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(34,197,94,0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" />
-          </svg>
-          <p style={{ fontWeight: 600, fontSize: '0.7rem', letterSpacing: '0.2em', color: '#4a5a72', marginTop: '12px' }}>ALL SYSTEMS OPERATIONAL</p>
-        </div>
+        {dismissed ? (
+          <div className="flex flex-col items-center justify-center py-8 rounded-xl" style={{ background: '#1a2540' }}>
+            <IconCheck size={40} color="rgba(34,197,94,0.7)" />
+            <p style={{ fontWeight: 600, fontSize: '0.7rem', letterSpacing: '0.2em', color: '#4a5a72', marginTop: '12px' }}>NO NEW UPDATES</p>
+          </div>
+        ) : (
+          <div className="rounded-xl p-4" style={{ background: '#1a2540', border: '1px solid rgba(59,158,221,0.22)' }}>
+            <div style={{ color: '#3b9edd', fontSize: '0.62rem', fontWeight: 800, letterSpacing: '0.15em', marginBottom: '8px' }}>OPERATIONS NOTICE</div>
+            <div style={{ color: '#fff', fontWeight: 700, fontSize: '0.9rem' }}>Flight operations are being monitored</div>
+            <div style={{ color: '#8899bb', fontSize: '0.76rem', lineHeight: 1.5, marginTop: '6px' }}>Followed-flight changes and duty updates will appear here.</div>
+            <button onClick={dismissUpdate} className="w-full mt-4 py-2 rounded-lg" style={{ background: 'rgba(59,158,221,0.14)', border: '1px solid rgba(59,158,221,0.3)', color: '#5bb8f5', fontWeight: 700, fontSize: '0.7rem', letterSpacing: '0.1em', cursor: 'pointer' }}>DISMISS UPDATE</button>
+          </div>
+        )}
       </div>
     </>
   )
@@ -1199,13 +1347,18 @@ function TacticalUpdatesPanel({ open, onClose }: { open: boolean; onClose: () =>
 
 // ── System Settings Panel ─────────────────────────────────────────────────────
 
-function SystemSettingsPanel({ open, onClose, theme, setTheme, user }: {
+function SystemSettingsPanel({ open, onClose, theme, setTheme, user, dutyTime, setDutyTime, hideLanded, setHideLanded, hideDeparted, setHideDeparted, onSignOut }: {
   open: boolean; onClose: () => void
   theme: Theme; setTheme: (t: Theme) => void
   user: StaffUser
+  dutyTime: DutyTime; setDutyTime: (d: DutyTime) => void
+  hideLanded: boolean; setHideLanded: (h: boolean) => void
+  hideDeparted: boolean; setHideDeparted: (h: boolean) => void
+  onSignOut: () => void
 }) {
   const [haptic, setHaptic] = useState(true)
   const [reducedMotion, setReducedMotion] = useState(false)
+  const colors = THEME_COLORS[theme]
 
   return (
     <>
@@ -1220,8 +1373,8 @@ function SystemSettingsPanel({ open, onClose, theme, setTheme, user }: {
       <div
         style={{
           position: 'fixed', bottom: 0, left: 0, right: 0,
-          background: '#131c2e',
-          border: '1px solid rgba(255,255,255,0.08)',
+          background: colors.surface,
+          border: `1px solid ${colors.border}`,
           borderRadius: '20px 20px 0 0',
           zIndex: 50,
           transform: open ? 'translateY(0)' : 'translateY(100%)',
@@ -1234,10 +1387,10 @@ function SystemSettingsPanel({ open, onClose, theme, setTheme, user }: {
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
             <IconUser size={18} color="#3b9edd" />
-            <span style={{ fontWeight: 800, fontSize: '0.78rem', letterSpacing: '0.15em', color: '#fff' }}>SYSTEM SETTINGS</span>
+            <span style={{ fontWeight: 800, fontSize: '0.78rem', letterSpacing: '0.15em', color: colors.text }}>SYSTEM SETTINGS</span>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}>
-            <IconX size={18} color="#4a5a72" />
+            <IconX size={18} color={colors.textMuted} />
           </button>
         </div>
 
@@ -1245,19 +1398,19 @@ function SystemSettingsPanel({ open, onClose, theme, setTheme, user }: {
         <div className="mb-6">
           <div className="flex items-center gap-2 mb-1">
             <IconMoon size={18} color="#3b9edd" />
-            <span style={{ fontWeight: 700, fontSize: '0.85rem', color: '#fff' }}>APPEARANCE</span>
+            <span style={{ fontWeight: 700, fontSize: '0.85rem', color: colors.text }}>APPEARANCE</span>
           </div>
-          <p style={{ fontSize: '0.75rem', color: '#4a5a72', marginBottom: '12px' }}>Select application theme</p>
-          <div className="flex rounded-xl p-1" style={{ background: '#1a2540' }}>
+          <p style={{ fontSize: '0.75rem', color: colors.textMuted, marginBottom: '12px' }}>Select application theme</p>
+          <div className="flex rounded-xl p-1" style={{ background: colors.bg }}>
             {(['light', 'dark', 'black'] as Theme[]).map(t => (
               <button
                 key={t}
-                onClick={() => setTheme(t)}
+                onClick={() => { setTheme(t); localStorage.setItem('app-theme', t) }}
                 className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg"
                 style={{
-                  background: theme === t ? '#2a3a52' : 'transparent',
-                  border: theme === t ? '1px solid rgba(255,255,255,0.12)' : '1px solid transparent',
-                  color: theme === t ? '#fff' : '#4a5a72',
+                  background: theme === t ? colors.sidebar : 'transparent',
+                  border: theme === t ? `1px solid ${colors.border}` : '1px solid transparent',
+                  color: theme === t ? '#fff' : colors.textMuted,
                   fontWeight: 700, fontSize: '0.72rem', letterSpacing: '0.08em',
                   cursor: 'pointer',
                 }}
@@ -1271,12 +1424,70 @@ function SystemSettingsPanel({ open, onClose, theme, setTheme, user }: {
           </div>
         </div>
 
+        {/* Duty Time */}
+        <div className="mb-6" style={{ borderTop: `1px solid ${colors.border}`, paddingTop: '16px' }}>
+          <div className="flex items-center gap-2 mb-1">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b9edd" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span style={{ fontWeight: 700, fontSize: '0.85rem', color: colors.text }}>DUTY TIME</span>
+          </div>
+          <p style={{ fontSize: '0.75rem', color: colors.textMuted, marginBottom: '12px' }}>Select your shift</p>
+          <div className="flex rounded-xl p-1 gap-1" style={{ background: colors.bg }}>
+            {(['morning', 'evening', 'night'] as DutyTime[]).map(time => (
+              <button
+                key={time}
+                onClick={() => { setDutyTime(time); localStorage.setItem('selected-duty-time', time) }}
+                className="flex-1 py-2.5 rounded-lg"
+                style={{
+                  background: dutyTime === time ? colors.sidebar : 'transparent',
+                  border: dutyTime === time ? `1px solid ${colors.border}` : '1px solid transparent',
+                  color: dutyTime === time ? '#fff' : colors.textMuted,
+                  fontWeight: 700, fontSize: '0.72rem', letterSpacing: '0.08em',
+                  cursor: 'pointer',
+                }}
+              >
+                {time.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Flight visibility settings */}
+        <div style={{ borderTop: `1px solid ${colors.border}`, paddingTop: '12px' }}>
+          {/* Hide Landed */}
+          <div className="flex items-center py-4">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 11.1a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 0h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 7.91"/></svg>
+            <div className="ml-3 flex-1">
+              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: colors.text }}>HIDE LANDED FLIGHTS</div>
+              <div style={{ fontSize: '0.72rem', color: colors.textMuted }}>Don't show completed flights</div>
+            </div>
+            <button onClick={() => setHideLanded(!hideLanded)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+              <div style={{ width: 48, height: 26, borderRadius: 13, background: hideLanded ? '#22c55e' : colors.bg, transition: 'background 0.2s', position: 'relative', border: `1px solid ${colors.border}` }}>
+                <div style={{ position: 'absolute', top: 2, left: hideLanded ? 24 : 2, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 4px rgba(0,0,0,0.3)' }} />
+              </div>
+            </button>
+          </div>
+
+          {/* Hide Departed */}
+          <div className="flex items-center py-4" style={{ borderTop: `1px solid ${colors.border}` }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 11.1a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 0h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 7.91"/></svg>
+            <div className="ml-3 flex-1">
+              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: colors.text }}>HIDE DEPARTED FLIGHTS</div>
+              <div style={{ fontSize: '0.72rem', color: colors.textMuted }}>Don't show departed flights</div>
+            </div>
+            <button onClick={() => setHideDeparted(!hideDeparted)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+              <div style={{ width: 48, height: 26, borderRadius: 13, background: hideDeparted ? '#22c55e' : colors.bg, transition: 'background 0.2s', position: 'relative', border: `1px solid ${colors.border}` }}>
+                <div style={{ position: 'absolute', top: 2, left: hideDeparted ? 24 : 2, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 4px rgba(0,0,0,0.3)' }} />
+              </div>
+            </button>
+          </div>
+        </div>
+
         {/* Notifications */}
-        <div className="flex items-center py-4" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+        <div className="flex items-center py-4" style={{ borderTop: `1px solid ${colors.border}` }}>
           <IconBell size={20} color="#22c55e" />
           <div className="ml-3 flex-1">
-            <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#fff' }}>NOTIFICATIONS</div>
-            <div style={{ fontSize: '0.72rem', color: '#4a5a72' }}>Enabled for updates</div>
+            <div style={{ fontWeight: 700, fontSize: '0.85rem', color: colors.text }}>NOTIFICATIONS</div>
+            <div style={{ fontSize: '0.72rem', color: colors.textMuted }}>Enabled for updates</div>
           </div>
           <div className="flex items-center gap-1" style={{ color: '#22c55e', fontSize: '0.7rem', fontWeight: 700 }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>
@@ -1285,51 +1496,49 @@ function SystemSettingsPanel({ open, onClose, theme, setTheme, user }: {
         </div>
 
         {/* Haptic */}
-        <div className="flex items-center py-4" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="5" y="2" width="14" height="20" rx="2" />
-          </svg>
+        <div className="flex items-center py-4" style={{ borderTop: `1px solid ${colors.border}` }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" /></svg>
           <div className="ml-3 flex-1">
-            <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#fff' }}>HAPTIC FEEDBACK</div>
-            <div style={{ fontSize: '0.72rem', color: '#4a5a72' }}>Vibration active</div>
+            <div style={{ fontWeight: 700, fontSize: '0.85rem', color: colors.text }}>HAPTIC FEEDBACK</div>
+            <div style={{ fontSize: '0.72rem', color: colors.textMuted }}>Vibration active</div>
           </div>
           <button onClick={() => setHaptic(!haptic)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-            <div style={{ width: 48, height: 26, borderRadius: 13, background: haptic ? '#22c55e' : '#1a2540', transition: 'background 0.2s', position: 'relative', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <div style={{ width: 48, height: 26, borderRadius: 13, background: haptic ? '#22c55e' : colors.bg, transition: 'background 0.2s', position: 'relative', border: `1px solid ${colors.border}` }}>
               <div style={{ position: 'absolute', top: 2, left: haptic ? 24 : 2, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 4px rgba(0,0,0,0.3)' }} />
             </div>
           </button>
         </div>
 
         {/* Reduced motion */}
-        <div className="flex items-center py-4" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+        <div className="flex items-center py-4" style={{ borderTop: `1px solid ${colors.border}` }}>
           <IconRefresh size={20} color="#3b9edd" />
           <div className="ml-3 flex-1">
-            <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#fff' }}>REDUCED MOTION</div>
-            <div style={{ fontSize: '0.72rem', color: '#4a5a72' }}>Full animations</div>
+            <div style={{ fontWeight: 700, fontSize: '0.85rem', color: colors.text }}>REDUCED MOTION</div>
+            <div style={{ fontSize: '0.72rem', color: colors.textMuted }}>Full animations</div>
           </div>
           <button onClick={() => setReducedMotion(!reducedMotion)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-            <div style={{ width: 48, height: 26, borderRadius: 13, background: reducedMotion ? '#22c55e' : '#1a2540', transition: 'background 0.2s', position: 'relative', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <div style={{ width: 48, height: 26, borderRadius: 13, background: reducedMotion ? '#22c55e' : colors.bg, transition: 'background 0.2s', position: 'relative', border: `1px solid ${colors.border}` }}>
               <div style={{ position: 'absolute', top: 2, left: reducedMotion ? 24 : 2, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 4px rgba(0,0,0,0.3)' }} />
             </div>
           </button>
         </div>
 
         {/* User */}
-        <div className="flex items-center py-4 mb-4" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-          <div className="flex items-center justify-center rounded-xl" style={{ width: 44, height: 44, background: '#1a2540', border: '1px solid rgba(255,255,255,0.1)', fontWeight: 800, fontSize: '0.85rem', color: '#d0ddf0' }}>
-            AS
+        <div className="flex items-center py-4 mb-4" style={{ borderTop: `1px solid ${colors.border}` }}>
+          <div className="flex items-center justify-center rounded-xl" style={{ width: 44, height: 44, background: colors.bg, border: `1px solid ${colors.border}`, fontWeight: 800, fontSize: '0.85rem', color: colors.text }}>
+            {user.name.split(' ').map(p => p[0]).join('').slice(0, 2)}
           </div>
           <div className="ml-3">
-            <div style={{ fontSize: '0.62rem', fontWeight: 600, letterSpacing: '0.1em', color: '#4a5a72' }}>AUTHENTICATED USER</div>
-            <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#fff' }}>{user.name.toUpperCase()}</div>
+            <div style={{ fontSize: '0.62rem', fontWeight: 600, letterSpacing: '0.1em', color: colors.textMuted }}>AUTHENTICATED USER</div>
+            <div style={{ fontWeight: 800, fontSize: '0.9rem', color: colors.text }}>{user.name.toUpperCase()}</div>
             <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#3b9edd' }}>{user.rcNumber} · STAFF ACCOUNT</div>
           </div>
         </div>
 
         <button
-          onClick={onClose}
+          onClick={onSignOut}
           className="w-full py-3.5 rounded-xl"
-          style={{ background: '#1a2540', border: '1px solid rgba(255,255,255,0.08)', fontWeight: 700, fontSize: '0.75rem', letterSpacing: '0.12em', color: '#d0ddf0', cursor: 'pointer' }}
+          style={{ background: colors.bg, border: `1px solid ${colors.border}`, fontWeight: 700, fontSize: '0.75rem', letterSpacing: '0.12em', color: colors.text, cursor: 'pointer' }}
         >
           SECURE LOGOUT
         </button>
@@ -1340,10 +1549,13 @@ function SystemSettingsPanel({ open, onClose, theme, setTheme, user }: {
 
 // ── More Options Bottom Sheet ─────────────────────────────────────────────────
 
-function MoreOptionsSheet({ open, onClose, onSettings, onSignOut }: {
+function MoreOptionsSheet({ open, onClose, onSettings, onSignOut, theme = 'dark' }: {
   open: boolean; onClose: () => void
   onSettings: () => void; onSignOut: () => void
+  theme?: Theme
 }) {
+  const colors = THEME_COLORS[theme]
+
   return (
     <>
       <div
@@ -1357,8 +1569,8 @@ function MoreOptionsSheet({ open, onClose, onSettings, onSignOut }: {
       <div
         style={{
           position: 'fixed', bottom: 0, left: 0, right: 0,
-          background: '#131c2e',
-          border: '1px solid rgba(255,255,255,0.08)',
+          background: colors.surface,
+          border: `1px solid ${colors.border}`,
           borderRadius: '20px 20px 0 0',
           zIndex: 50,
           transform: open ? 'translateY(0)' : 'translateY(100%)',
@@ -1367,28 +1579,34 @@ function MoreOptionsSheet({ open, onClose, onSettings, onSignOut }: {
         }}
       >
         <div className="px-5 mb-4">
-          <span style={{ fontWeight: 800, fontSize: '0.78rem', letterSpacing: '0.15em', color: '#fff' }}>MORE OPTIONS</span>
+          <span style={{ fontWeight: 800, fontSize: '0.78rem', letterSpacing: '0.15em', color: colors.text }}>MORE OPTIONS</span>
         </div>
-        <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)', marginBottom: '8px' }} />
+        <div style={{ height: '1px', background: colors.border, marginBottom: '8px' }} />
         <div className="px-5 pb-2 pt-3">
-          <p style={{ fontWeight: 700, fontSize: '0.65rem', letterSpacing: '0.15em', color: '#4a5a72', marginBottom: '4px' }}>PREFERENCES & SYSTEM</p>
+          <p style={{ fontWeight: 700, fontSize: '0.65rem', letterSpacing: '0.15em', color: colors.textMuted, marginBottom: '4px' }}>PREFERENCES & SYSTEM</p>
         </div>
         {[
-          { icon: <IconMoon size={20} color="#8899bb" />, label: 'Black Mode', action: onClose },
-          { icon: <IconSettings size={20} color="#8899bb" />, label: 'Settings', action: () => { onClose(); onSettings() } },
-          { icon: <IconHelp size={20} color="#8899bb" />, label: 'Help Center', action: onClose },
+          { icon: <IconSettings size={20} color={colors.textMuted} />, label: 'Settings', action: () => { onClose(); onSettings() } },
         ].map(item => (
           <button
             key={item.label}
             onClick={item.action}
             className="flex items-center gap-4 w-full px-5 py-4"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.04)' }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', borderBottom: `1px solid ${colors.border}` }}
           >
             {item.icon}
-            <span style={{ fontWeight: 600, fontSize: '0.95rem', color: '#d0ddf0' }}>{item.label}</span>
+            <span style={{ fontWeight: 600, fontSize: '0.95rem', color: colors.text }}>{item.label}</span>
           </button>
         ))}
-        <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)', margin: '4px 0' }} />
+        <a href="https://macl-itp.netlify.app/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-4 px-5 py-4" style={{ background: 'none', border: 'none', cursor: 'pointer', borderBottom: `1px solid ${colors.border}`, textDecoration: 'none', color: 'inherit', display: 'flex' }}>
+          <IconHelp size={20} color={colors.textMuted} />
+          <span style={{ fontWeight: 600, fontSize: '0.95rem', color: colors.text }}>ITP</span>
+        </a>
+        <a href="https://itp-logentry.netlify.app/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-4 px-5 py-4" style={{ background: 'none', border: 'none', cursor: 'pointer', borderBottom: `1px solid ${colors.border}`, textDecoration: 'none', color: 'inherit', display: 'flex' }}>
+          <IconSettings size={20} color={colors.textMuted} />
+          <span style={{ fontWeight: 600, fontSize: '0.95rem', color: colors.text }}>LOG ENTRY</span>
+        </a>
+        <div style={{ height: '1px', background: colors.border, margin: '4px 0' }} />
         <button
           onClick={() => { onClose(); onSignOut() }}
           className="flex items-center gap-4 w-full px-5 py-4"
@@ -1457,21 +1675,43 @@ function AppShell({ onSignOut, user }: { onSignOut: () => void; user: StaffUser 
     catch { return {} }
   })
   const followedFlightsRef = useRef(followedFlights)
+  const flightsRef = useRef(flights)
   const previousFlightsRef = useRef<Flight[]>([])
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [tacticalOpen, setTacticalOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
-  const [theme, setTheme] = useState<Theme>('dark')
+  const [theme, setTheme] = useState<Theme>(() => {
+    try { return (localStorage.getItem('app-theme') as Theme) || 'dark' }
+    catch { return 'dark' }
+  })
+  const [dutyTime, setDutyTime] = useState<DutyTime>(() => {
+    try { return (localStorage.getItem('selected-duty-time') as DutyTime) || 'morning' }
+    catch { return 'morning' }
+  })
+  const [hideLanded, setHideLanded] = useState(() => {
+    try { return localStorage.getItem('hide-landed-flights') === 'true' }
+    catch { return false }
+  })
+  const [hideDeparted, setHideDeparted] = useState(() => {
+    try { return localStorage.getItem('hide-departed-flights') === 'true' }
+    catch { return false }
+  })
   const [toast, setToast] = useState({ show: true, message: `Welcome back, ${user.name}!` })
+  const colors = THEME_COLORS[theme]
 
   useEffect(() => { followedFlightsRef.current = followedFlights }, [followedFlights])
+  useEffect(() => { flightsRef.current = flights }, [flights])
 
   useEffect(() => {
     localStorage.setItem('followed-flight-ids', JSON.stringify([...followedFlights]))
     localStorage.setItem('flight-reminders', JSON.stringify(reminders))
+    localStorage.setItem('app-theme', theme)
+    localStorage.setItem('selected-duty-time', dutyTime)
+    localStorage.setItem('hide-landed-flights', String(hideLanded))
+    localStorage.setItem('hide-departed-flights', String(hideDeparted))
     void syncPushSubscription(followedFlights, reminders)
-  }, [followedFlights, reminders])
+  }, [followedFlights, reminders, theme, dutyTime, hideLanded, hideDeparted])
 
   useEffect(() => {
     const checkReminders = () => {
@@ -1511,8 +1751,11 @@ function AppShell({ onSignOut, user }: { onSignOut: () => void; user: StaffUser 
             const previous = previousById.get(flight.id)
             if (previous && followedFlightsRef.current.has(flight.id) && (previous.status !== flight.status || previous.eta !== flight.eta || previous.std !== flight.std)) notifyFlightUpdate(flight)
           })
+          const liveIds = new Set(liveFlights.map(flight => flight.id))
+          const preservedFollowed = flightsRef.current.filter(flight => followedFlightsRef.current.has(flight.id) && !liveIds.has(flight.id))
+          const nextFlights = [...liveFlights, ...preservedFollowed]
           previousFlightsRef.current = liveFlights
-          setFlights(liveFlights)
+          setFlights(nextFlights)
         }
       } catch (error) {
         console.warn('Unable to load live flights; using the last available list.', error)
@@ -1560,9 +1803,9 @@ function AppShell({ onSignOut, user }: { onSignOut: () => void; user: StaffUser 
   }
 
   return (
-    <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: '#0b1120', maxWidth: '480px', margin: '0 auto', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: colors.bg, maxWidth: '480px', margin: '0 auto', position: 'relative', overflow: 'hidden' }}>
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3" style={{ background: '#0b1120', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
+      <div className="flex items-center justify-between px-4 py-3" style={{ background: colors.bg, borderBottom: `1px solid ${colors.border}`, flexShrink: 0 }}>
         <button onClick={() => setDrawerOpen(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px' }}>
           <HexLogo size={32} />
         </button>
@@ -1570,21 +1813,14 @@ function AppShell({ onSignOut, user }: { onSignOut: () => void; user: StaffUser 
           <button
             onClick={() => setTacticalOpen(true)}
             className="flex items-center justify-center rounded-xl"
-            style={{ width: 38, height: 38, background: '#131c2e', border: '1px solid rgba(255,255,255,0.08)', cursor: 'pointer' }}
+            style={{ width: 38, height: 38, background: colors.surface, border: `1px solid ${colors.border}`, cursor: 'pointer' }}
           >
-            <IconSpark size={17} color="#8899bb" />
-          </button>
-          <button
-            onClick={() => setTacticalOpen(true)}
-            className="flex items-center justify-center rounded-xl"
-            style={{ width: 38, height: 38, background: '#131c2e', border: '1px solid rgba(255,255,255,0.08)', cursor: 'pointer' }}
-          >
-            <IconBell size={17} color="#8899bb" />
+            <IconBell size={17} color={colors.textMuted} />
           </button>
           <button
             onClick={() => setSettingsOpen(true)}
             className="flex items-center justify-center rounded-xl"
-            style={{ width: 38, height: 38, background: '#1a2540', border: '1px solid rgba(255,255,255,0.12)', cursor: 'pointer', fontWeight: 800, fontSize: '0.75rem', color: '#d0ddf0' }}
+            style={{ width: 38, height: 38, background: colors.surface, border: `1px solid ${colors.border}`, cursor: 'pointer', fontWeight: 800, fontSize: '0.75rem', color: colors.text }}
           >
             {user.name.split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase()}
           </button>
@@ -1592,9 +1828,9 @@ function AppShell({ onSignOut, user }: { onSignOut: () => void; user: StaffUser 
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, overflow: 'hidden' }}>
-        {activeTab === 'refueling' && <RefuelingScreen flights={flights} followedFlights={followedFlights} reminders={reminders} onFollow={handleFollow} onReminder={handleReminder} />}
-        {activeTab === 'followed' && <FollowedFlightsScreen flights={flights} followedFlights={followedFlights} reminders={reminders} onFollow={handleFollow} onReminder={handleReminder} />}
+      <div style={{ flex: 1, overflow: 'hidden', background: colors.bg }}>
+        {activeTab === 'refueling' && <RefuelingScreen flights={flights} followedFlights={followedFlights} reminders={reminders} onFollow={handleFollow} onReminder={handleReminder} dutyTime={dutyTime} theme={theme} hideLanded={hideLanded} hideDeparted={hideDeparted} />}
+        {activeTab === 'followed' && <FollowedFlightsScreen flights={flights} followedFlights={followedFlights} reminders={reminders} onFollow={handleFollow} onReminder={handleReminder} theme={theme} />}
         {activeTab === 'density' && <DensityMeasureScreen />}
       </div>
 
@@ -1602,11 +1838,13 @@ function AppShell({ onSignOut, user }: { onSignOut: () => void; user: StaffUser 
       <div
         className="flex items-center justify-around px-2 py-2"
         style={{
-          background: '#111827',
-          border: '1px solid rgba(255,255,255,0.07)',
-          borderRadius: '20px 20px 0 0',
+          background: colors.surface,
+          border: `1px solid ${colors.border}`,
+          borderRadius: '18px',
           flexShrink: 0,
+          margin: '0 10px 10px',
           paddingBottom: 'calc(8px + env(safe-area-inset-bottom, 0px))',
+          boxShadow: '0 10px 30px rgba(0,0,0,0.22)',
         }}
       >
         {tabs.map(({ tab, Icon, label }) => {
@@ -1628,10 +1866,10 @@ function AppShell({ onSignOut, user }: { onSignOut: () => void; user: StaffUser 
       </div>
 
       {/* Overlays */}
-      <SideDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} activeTab={activeTab} onNav={setActiveTab} onSignOut={onSignOut} />
+      <SideDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} activeTab={activeTab} onNav={setActiveTab} onSignOut={onSignOut} theme={theme} />
       <TacticalUpdatesPanel open={tacticalOpen} onClose={() => setTacticalOpen(false)} />
-      <SystemSettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} theme={theme} setTheme={setTheme} user={user} />
-      <MoreOptionsSheet open={moreOpen} onClose={() => setMoreOpen(false)} onSettings={() => setSettingsOpen(true)} onSignOut={onSignOut} />
+      <SystemSettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} theme={theme} setTheme={setTheme} user={user} dutyTime={dutyTime} setDutyTime={setDutyTime} hideLanded={hideLanded} setHideLanded={setHideLanded} hideDeparted={hideDeparted} setHideDeparted={setHideDeparted} onSignOut={onSignOut} />
+      <MoreOptionsSheet open={moreOpen} onClose={() => setMoreOpen(false)} onSettings={() => setSettingsOpen(true)} onSignOut={onSignOut} theme={theme} />
       <Toast show={toast.show} message={toast.message} onDismiss={() => setToast(t => ({ ...t, show: false }))} />
     </div>
   )
@@ -1640,10 +1878,12 @@ function AppShell({ onSignOut, user }: { onSignOut: () => void; user: StaffUser 
 // ── Root ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>('login')
-  const [user, setUser] = useState<StaffUser | null>(null)
+  const [user, setUser] = useState<StaffUser | null>(() => {
+    try { return JSON.parse(localStorage.getItem('auth-user') ?? 'null') as StaffUser | null }
+    catch { return null }
+  })
 
-  return screen === 'login'
-    ? <LoginScreen onLogin={authenticatedUser => { setUser(authenticatedUser); setScreen('app') }} />
-    : <AppShell user={user!} onSignOut={() => { setUser(null); setScreen('login') }} />
+  return user === null
+    ? <LoginScreen onLogin={authenticatedUser => { setUser(authenticatedUser); localStorage.setItem('auth-user', JSON.stringify(authenticatedUser)) }} />
+    : <AppShell user={user} onSignOut={() => { setUser(null); localStorage.removeItem('auth-user') }} />
 }
